@@ -37,6 +37,12 @@ describe('App Root Flow Seam', () => {
 
     // App navigation is present
     expect(screen.getByRole('navigation')).toBeInTheDocument();
+
+    // Dashboard telemetry cards are displayed
+    expect(screen.getByText(/Water Autonomy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Blend Tank Gauge/i)).toBeInTheDocument();
+    expect(screen.getByText(/Daily Water Balance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Water Efficiency & Savings/i)).toBeInTheDocument();
   });
 
   it('logs out and returns to DemoLoginScreen', () => {
