@@ -221,3 +221,11 @@ __marimo__/
 AGENTS.md
 docs/agents/
 .scratch/
+
+# Node.js / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+
