@@ -87,7 +87,7 @@ _Avoid_: Animal water, cattle demand
 Irrigation water supplied to crops: Olive trees, Vineyards, Vegetables, Pasture, and Fruit trees.
 _Avoid_: Crop watering, field load
 
-## 5. Operations and Telemetry
+## 5. Operations, Efficiency and Optimization
 
 **Water autonomy**:
 Estimated number of days the farm can sustain operations without external refills, based on current stored volumes and average daily consumption.
@@ -101,3 +101,14 @@ _Avoid_: Water differential, flow balance
 Operational state of the irrigation network: Auto (scheduled), Eco (water-saving reduced deficit irrigation), or Paused.
 _Avoid_: Watering status
 
+**Optimal design**:
+The calibrated system configuration that minimizes total annual cost while satisfying all quality and demand constraints without deficit.
+_Avoid_: Best configuration, tuned mode
+
+**Unoptimized baseline**:
+A naive, non-calibrated operating state used for demonstration comparison, exhibiting lower autonomy, higher external supply expenses, and quality violations.
+_Avoid_: Uncalibrated mode, raw state
+
+**Water efficiency**:
+The percentage of total farm demand satisfied by local sustainable sources (Rainwater + ESA) versus external water deliveries, alongside estimated daily financial savings.
+_Avoid_: Eco score, savings index
