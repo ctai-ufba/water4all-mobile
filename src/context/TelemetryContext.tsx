@@ -20,8 +20,17 @@ import {
   WaterFlowMetrics,
   TelemetryState,
   getFarmBaseline,
+  IrrigationMode,
+  PumpTransferResult,
+  WaterTruckDeliveryResult,
+  TransferSourceTank,
 } from '../types/telemetry';
 import { computeTelemetryState } from '../domain/telemetryEngine';
+import {
+  calculateTruckDelivery,
+  calculateIrrigationDemand,
+  validateAndExecutePumpTransfer,
+} from '../domain/supervisoryEngine';
 
 /**
  * Interface defining the TelemetryContext shape and dispatch methods.
@@ -57,6 +66,46 @@ export interface TelemetryContextType {
   setFlows: (
     updater: WaterFlowMetrics | ((prev: WaterFlowMetrics) => WaterFlowMetrics)
   ) => void;
+  /**
+   * Switches the active farm irrigation operational mode.
+   *
+   * @summary Set irrigation mode.
+   * @description Updates irrigationMode ('auto', 'eco', 'paused'), recalculates
+   * daily irrigation demand according to mode ratio, and re-evaluates telemetry.
+   *
+   * @param mode - Target irrigation mode.
+   * @returns void
+   * @throws Never throws.
+   */
+  setIrrigationMode: (mode: IrrigationMode) => void;
+  /**
+   * Dispatches an external water truck delivery request for emergency replenishment.
+   *
+   * @summary Request water truck delivery.
+   * @description Adds +10 m³ or +25 m³ to the External supply tank, capped at physical
+   * capacity, and records the simulated financial expense.
+   *
+   * @param volumeM3 - Delivery volume to order (+10 or +25 m³).
+   * @returns WaterTruckDeliveryResult with delivered volume and cost details.
+   * @throws Never throws.
+   */
+  requestWaterTruck: (volumeM3: 10 | 25) => WaterTruckDeliveryResult;
+  /**
+   * Executes a manual pump transfer from Rainwater or ESA tank into the Blend tank.
+   *
+   * @summary Execute manual pump transfer.
+   * @description Validates source availability and Blend tank headroom, then updates
+   * storage volumes ensuring strict mass balance conservation.
+   *
+   * @param fromTank - Source tank ('rainwater' or 'esa').
+   * @param volumeM3 - Volume to transfer in m³.
+   * @returns PumpTransferResult indicating success, transferred volume, or error message.
+   * @throws Never throws.
+   */
+  executePumpTransfer: (
+    fromTank: TransferSourceTank,
+    volumeM3: number
+  ) => PumpTransferResult;
   /**
    * Resets active telemetry to the pre-calibrated baseline of the active farm profile.
    *
@@ -111,7 +160,7 @@ export interface TelemetryProviderProps {
  *
  * @summary Telemetry state provider.
  * @description Listens to the active farm profile and maintains live reservoir volumes,
- * flow rates, and derived telemetry metrics, with localStorage persistence.
+ * flow rates, supervisory actions, and derived telemetry metrics, with localStorage persistence.
  *
  * @param props - Component props containing children nodes.
  * @returns React.JSX.Element wrapping child components with TelemetryContext.
@@ -132,20 +181,70 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const [flows, setFlowsState] = useState<WaterFlowMetrics | null>(() => {
     if (activeFarm) {
       const baseline = getFarmBaseline(activeFarm.id);
-      return loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, { ...baseline.flows });
+      const initialFlows = loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, { ...baseline.flows });
+      // Rehydrate irrigationDemand immediately based on persisted irrigationMode
+      const savedMode = loadPersisted<IrrigationMode>(
+        `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+        'auto'
+      );
+      const adjustedDemand = calculateIrrigationDemand(baseline.flows.irrigationDemand, savedMode);
+      return {
+        ...initialFlows,
+        irrigationDemand: adjustedDemand,
+      };
     }
     return null;
+  });
+
+  // Supervisory control states: irrigation mode and cumulative delivery costs
+  const [irrigationMode, setIrrigationModeState] = useState<IrrigationMode>(() => {
+    if (activeFarm) {
+      return loadPersisted<IrrigationMode>(
+        `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+        'auto'
+      );
+    }
+    return 'auto';
+  });
+
+  const [cumulativeTruckCost, setCumulativeTruckCost] = useState<number>(() => {
+    if (activeFarm) {
+      return loadPersisted<number>(
+        `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
+        0
+      );
+    }
+    return 0;
   });
 
   // Reinitialize volumes and flows whenever the active farm profile changes
   useEffect(() => {
     if (activeFarm) {
       const baseline = getFarmBaseline(activeFarm.id);
+      const savedMode = loadPersisted<IrrigationMode>(
+        `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+        'auto'
+      );
+      const savedFlows = loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, { ...baseline.flows });
+      const adjustedDemand = calculateIrrigationDemand(baseline.flows.irrigationDemand, savedMode);
+
       setVolumes(loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`, { ...baseline.volumes }));
-      setFlowsState(loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, { ...baseline.flows }));
+      setFlowsState({
+        ...savedFlows,
+        irrigationDemand: adjustedDemand,
+      });
+      setIrrigationModeState(savedMode);
+      setCumulativeTruckCost(
+        loadPersisted<number>(
+          `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
+          0
+        )
+      );
     } else {
       setVolumes(null);
       setFlowsState(null);
+      setIrrigationModeState('auto');
+      setCumulativeTruckCost(0);
     }
   }, [activeFarm?.id]);
 
@@ -210,11 +309,135 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   };
 
   /**
+   * Switches the active farm irrigation operational mode.
+   *
+   * @summary Set irrigation mode.
+   * @description Updates state, persists mode to localStorage, and updates the irrigation
+   * demand flow based on the pre-calibrated baseline and the selected mode.
+   *
+   * @param mode - Operational irrigation mode ('auto', 'eco', 'paused').
+   * @returns void
+   * @throws Never throws.
+   */
+  const setIrrigationMode = (mode: IrrigationMode): void => {
+    setIrrigationModeState(mode);
+    if (activeFarm) {
+      try {
+        localStorage.setItem(
+          `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+          JSON.stringify(mode)
+        );
+      } catch (e) {
+        console.warn('Failed to persist irrigationMode to localStorage:', e);
+      }
+
+      // Calculate adjusted irrigation demand using the baseline rate
+      const baseline = getFarmBaseline(activeFarm.id);
+      const adjustedDemand = calculateIrrigationDemand(baseline.flows.irrigationDemand, mode);
+
+      setFlows((prev) => ({
+        ...prev,
+        irrigationDemand: adjustedDemand,
+      }));
+    }
+  };
+
+  /**
+   * Dispatches an external water truck delivery request for emergency replenishment.
+   *
+   * @summary Request water truck delivery.
+   * @description Adds delivered water to the external tank (capped at capacity), logs the
+   * expense, and updates localStorage.
+   *
+   * @param volumeM3 - Delivery volume to order (+10 or +25 m³).
+   * @returns WaterTruckDeliveryResult with delivery volume, cost, and capping status.
+   * @throws Never throws.
+   */
+  const requestWaterTruck = (volumeM3: 10 | 25): WaterTruckDeliveryResult => {
+    if (!activeFarm || !volumes) {
+      return {
+        deliveredM3: 0,
+        newVolumeM3: 0,
+        addedCostEur: 0,
+        isCapped: false,
+      };
+    }
+
+    const deliveryResult = calculateTruckDelivery(
+      volumes.external,
+      activeFarm.tankCapacities.external,
+      volumeM3
+    );
+
+    // Update external reservoir volume
+    setTankVolumes((prev) => ({
+      ...prev,
+      external: deliveryResult.newVolumeM3,
+    }));
+
+    // Accumulate delivery expense
+    setCumulativeTruckCost((prev) => {
+      const updatedCost = prev + deliveryResult.addedCostEur;
+      try {
+        localStorage.setItem(
+          `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
+          JSON.stringify(updatedCost)
+        );
+      } catch (e) {
+        console.warn('Failed to persist truckCost to localStorage:', e);
+      }
+      return updatedCost;
+    });
+
+    return deliveryResult;
+  };
+
+  /**
+   * Executes a manual pump transfer from Rainwater or ESA tank into the Blend tank.
+   *
+   * @summary Execute manual pump transfer.
+   * @description Validates transfer parameters, updates reservoir volumes respecting mass balance,
+   * and persists new volumes to localStorage.
+   *
+   * @param fromTank - Source tank ('rainwater' or 'esa').
+   * @param volumeM3 - Water volume to transfer in m³.
+   * @returns PumpTransferResult indicating success, transferred amount, and error message if any.
+   * @throws Never throws.
+   */
+  const executePumpTransfer = (
+    fromTank: TransferSourceTank,
+    volumeM3: number
+  ): PumpTransferResult => {
+    if (!activeFarm || !volumes) {
+      return {
+        success: false,
+        transferredM3: 0,
+        updatedVolumes: volumes ?? { rainwater: 0, esa: 0, external: 0, blend: 0 },
+        errorMessage: 'No active farm profile loaded.',
+      };
+    }
+
+    const transferResult = validateAndExecutePumpTransfer({
+      fromTank,
+      volumeM3,
+      currentVolumes: volumes,
+      capacities: activeFarm.tankCapacities,
+    });
+
+    if (transferResult.success) {
+      setTankVolumes(transferResult.updatedVolumes);
+    }
+
+    return transferResult;
+  };
+
+  /**
    * Resets active farm telemetry back to pre-calibrated baseline and clears custom persistence.
    *
    * @summary Reset telemetry to baseline.
-   * @description Reverts reservoir volumes and flow rates to profile defaults,
-   * removing persisted custom values from browser localStorage.
+   * @description Reverts reservoir volumes and flow rates to profile defaults, resets
+   * supervisory controls (irrigation mode to 'auto', cumulative costs to 0), and removes
+   * persisted custom values from browser localStorage.
    *
    * @returns void
    * @throws Never throws.
@@ -224,28 +447,41 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       const baseline = getFarmBaseline(activeFarm.id);
       setVolumes({ ...baseline.volumes });
       setFlowsState({ ...baseline.flows });
+      setIrrigationModeState('auto');
+      setCumulativeTruckCost(0);
       try {
         localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`);
         localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`);
+        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`);
+        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`);
       } catch (e) {
         console.warn('Failed to remove telemetry from localStorage:', e);
       }
     }
   };
 
-  // Recompute consolidated telemetry whenever activeFarm, volumes, or flows change
+  // Recompute consolidated telemetry whenever activeFarm, volumes, flows, or supervisory states change
   const telemetry = useMemo<TelemetryState | null>(() => {
     if (!activeFarm || !volumes || !flows) {
       return null;
     }
-    return computeTelemetryState(activeFarm, volumes, flows);
-  }, [activeFarm, volumes, flows]);
+    return computeTelemetryState(
+      activeFarm,
+      volumes,
+      flows,
+      irrigationMode,
+      cumulativeTruckCost
+    );
+  }, [activeFarm, volumes, flows, irrigationMode, cumulativeTruckCost]);
 
   const contextValue = useMemo<TelemetryContextType>(
     () => ({
       telemetry,
       setTankVolumes,
       setFlows,
+      setIrrigationMode,
+      requestWaterTruck,
+      executePumpTransfer,
       resetToBaseline,
     }),
     [telemetry]

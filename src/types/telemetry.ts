@@ -45,6 +45,66 @@ export interface WaterFlowMetrics {
 }
 
 /**
+ * Operational mode of the farm irrigation network.
+ * - 'auto': Scheduled automated irrigation at baseline demand.
+ * - 'eco': Water-saving deficit irrigation (reduced demand).
+ * - 'paused': Irrigation completely suspended (0 m³/day).
+ */
+export type IrrigationMode = 'auto' | 'eco' | 'paused';
+
+/**
+ * Result payload returned from an external water truck delivery request.
+ */
+export interface WaterTruckDeliveryResult {
+  /** Delivered volume in m³ added to external supply tank */
+  deliveredM3: number;
+  /** Financial expense logged for the delivery in EUR */
+  addedCostEur: number;
+  /** Whether the delivery had to be capped at the tank's maximum capacity */
+  isCapped: boolean;
+  /** Updated external tank volume in m³ */
+  newVolumeM3: number;
+}
+
+/**
+ * Eligible source storage tanks for manual pump transfers into the Blend tank.
+ */
+export type TransferSourceTank = 'rainwater' | 'esa';
+
+/**
+ * Parameters required to execute a manual pump transfer.
+ */
+export interface PumpTransferParams {
+  /** Source tank to pump water from */
+  fromTank: TransferSourceTank;
+  /** Target volume to transfer into the Blend tank in m³ */
+  volumeM3: number;
+  /** Current volumes across all tanks in m³ */
+  currentVolumes: TankVolumeMetrics;
+  /** Physical capacities across all tanks in m³ */
+  capacities: {
+    rainwater: number;
+    esa: number;
+    external: number;
+    blend: number;
+  };
+}
+
+/**
+ * Result payload returned from a manual pump transfer execution.
+ */
+export interface PumpTransferResult {
+  /** Whether the transfer passed validation and was executed successfully */
+  success: boolean;
+  /** Volume in m³ successfully transferred into the Blend tank */
+  transferredM3: number;
+  /** Updated tank volumes after applying mass balance */
+  updatedVolumes: TankVolumeMetrics;
+  /** Error message describing validation failure, if any */
+  errorMessage?: string;
+}
+
+/**
  * Complete consolidated telemetry state for an active farm.
  */
 export interface TelemetryState {
@@ -72,6 +132,10 @@ export interface TelemetryState {
   isBelowMinOperatingVolume: boolean;
   /** Deficit volume below minimum operating volume if breached, otherwise 0 m³ */
   blendDeficitM3: number;
+  /** Active operational mode of the irrigation network */
+  irrigationMode: IrrigationMode;
+  /** Cumulative financial expense incurred from external water truck deliveries in EUR */
+  cumulativeTruckDeliveryCostEur: number;
 }
 
 /**

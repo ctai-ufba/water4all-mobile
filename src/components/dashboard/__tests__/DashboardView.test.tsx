@@ -43,6 +43,8 @@ describe('DashboardView Seam', () => {
     dailySavingsEur: 11.7,
     isBelowMinOperatingVolume: false,
     blendDeficitM3: 0,
+    irrigationMode: 'auto',
+    cumulativeTruckDeliveryCostEur: 0,
   };
 
   const breachedTelemetry: TelemetryState = {
@@ -113,6 +115,9 @@ describe('DashboardView Seam', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -136,6 +141,9 @@ describe('DashboardView Seam', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -160,6 +168,9 @@ describe('DashboardView Seam', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -195,6 +206,9 @@ describe('DashboardView Seam', () => {
       telemetry: breachedTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -220,6 +234,9 @@ describe('DashboardView Seam', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -244,6 +261,9 @@ describe('DashboardView Seam', () => {
       telemetry: deficitTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -265,6 +285,9 @@ describe('DashboardView Seam', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 

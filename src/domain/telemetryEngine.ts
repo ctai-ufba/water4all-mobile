@@ -13,6 +13,7 @@ import {
   TelemetryState,
   getFarmBaseline,
   EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3,
+  IrrigationMode,
 } from '../types/telemetry';
 
 /**
@@ -201,18 +202,23 @@ export function checkBlendOperatingVolume(
  *
  * @summary Consolidate farm telemetry state.
  * @description Aggregates raw tank volumes and flow rates with computed water autonomy,
- * daily water balance, local water efficiency, financial savings, and Blend tank alarms.
+ * daily water balance, local water efficiency, financial savings, Blend tank alarms,
+ * active irrigation mode, and cumulative water truck delivery expenses.
  *
  * @param farm - Mediterranean farm profile providing capacity constraints and thresholds.
  * @param volumes - Active reservoir volumes in m³.
  * @param flows - Active flow rates in m³/day.
+ * @param irrigationMode - Operational mode of the farm irrigation network (defaults to 'auto').
+ * @param cumulativeTruckDeliveryCostEur - Cumulative external truck costs in EUR (defaults to 0).
  * @returns Consolidated TelemetryState object.
  * @throws Never throws.
  */
 export function computeTelemetryState(
   farm: FarmProfile,
   volumes: TankVolumeMetrics,
-  flows: WaterFlowMetrics
+  flows: WaterFlowMetrics,
+  irrigationMode: IrrigationMode = 'auto',
+  cumulativeTruckDeliveryCostEur: number = 0
 ): TelemetryState {
   const totalStoredVolume = calculateTotalStored(volumes);
   const totalInflow = calculateTotalInflow(flows);
@@ -245,6 +251,8 @@ export function computeTelemetryState(
     dailySavingsEur,
     isBelowMinOperatingVolume: isBreached,
     blendDeficitM3: deficitM3,
+    irrigationMode,
+    cumulativeTruckDeliveryCostEur,
   };
 }
 

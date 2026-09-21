@@ -6,7 +6,7 @@
  * Displays individual fluid level gauges, active source statuses, capacities, and alerts.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTelemetry } from '../../context/TelemetryContext';
 import {
@@ -15,14 +15,18 @@ import {
   getTankAlertLevel,
 } from '../../domain/tankStatusEngine';
 import { TankCard } from './TankCard';
-import { CloudRain, Wind, Truck, Cylinder, Layers, AlertTriangle } from 'lucide-react';
+import { IrrigationModeSelector } from '../supervisory/IrrigationModeSelector';
+import { WaterTruckModal } from '../supervisory/WaterTruckModal';
+import { PumpTransferModal } from '../supervisory/PumpTransferModal';
+import { CloudRain, Wind, Truck, Cylinder, Layers, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 
 /**
  * Dedicated Tanks & Sources screen component.
  *
  * @summary Tanks and sources monitoring view.
  * @description Provides the farm operator with detailed visibility into all four
- * physical water storage assets, overall farm storage totals, and critical low-volume alerts.
+ * physical water storage assets, overall farm storage totals, critical low-volume alerts,
+ * and interactive supervisory controls (Water Truck Request, Irrigation Mode, Pump Transfer).
  *
  * @returns React.JSX.Element representing the Tanks & Sources monitoring view.
  * @throws Never throws.
@@ -30,6 +34,11 @@ import { CloudRain, Wind, Truck, Cylinder, Layers, AlertTriangle } from 'lucide-
 export function TanksView(): React.JSX.Element {
   const { activeFarm } = useAuth();
   const { telemetry } = useTelemetry();
+
+  // Supervisory control modal states
+  const [isTruckModalOpen, setIsTruckModalOpen] = useState(false);
+  const [isPumpModalOpen, setIsPumpModalOpen] = useState(false);
+  const [pumpSource, setPumpSource] = useState<'rainwater' | 'esa'>('rainwater');
 
   // If no farm is active or telemetry is loading, display loading placeholder
   if (!activeFarm || !telemetry) {
@@ -181,6 +190,53 @@ export function TanksView(): React.JSX.Element {
         </div>
       )}
 
+      {/* Supervisory Actions: Irrigation Mode Selector */}
+      <IrrigationModeSelector />
+
+      {/* Supervisory Quick Action Buttons: Water Truck & Manual Pump */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setIsTruckModalOpen(true)}
+          className="flex items-center space-x-2.5 rounded-2xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/50 to-slate-900 p-3.5 shadow-lg hover:border-cyan-500/60 hover:from-cyan-950/70 transition-all text-left group"
+        >
+          <div className="rounded-xl bg-cyan-500/15 p-2 text-cyan-400 ring-1 ring-cyan-500/30 group-hover:bg-cyan-500/25 transition-colors">
+            <Truck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors">
+              Request Truck
+            </div>
+            <div className="text-[10px] text-slate-400">
+              {telemetry.cumulativeTruckDeliveryCostEur > 0
+                ? `${telemetry.cumulativeTruckDeliveryCostEur.toFixed(0)} € logged`
+                : '+10 / +25 m³'}
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setPumpSource('rainwater');
+            setIsPumpModalOpen(true);
+          }}
+          className="flex items-center space-x-2.5 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/50 to-slate-900 p-3.5 shadow-lg hover:border-emerald-500/60 hover:from-emerald-950/70 transition-all text-left group"
+        >
+          <div className="rounded-xl bg-emerald-500/15 p-2 text-emerald-400 ring-1 ring-emerald-500/30 group-hover:bg-emerald-500/25 transition-colors">
+            <ArrowRightLeft className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors">
+              Pump Transfer
+            </div>
+            <div className="text-[10px] text-slate-400">
+              To Blend Tank
+            </div>
+          </div>
+        </button>
+      </div>
+
       {/* Individual Tank Cards */}
       <div className="space-y-3.5">
         {tankItems.map((item) => (
@@ -200,6 +256,18 @@ export function TanksView(): React.JSX.Element {
           />
         ))}
       </div>
+
+      {/* Supervisory Modals */}
+      <WaterTruckModal
+        isOpen={isTruckModalOpen}
+        onClose={() => setIsTruckModalOpen(false)}
+      />
+
+      <PumpTransferModal
+        isOpen={isPumpModalOpen}
+        initialSource={pumpSource}
+        onClose={() => setIsPumpModalOpen(false)}
+      />
     </div>
   );
 }

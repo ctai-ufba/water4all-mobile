@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TanksView } from '../TanksView';
 import * as AuthContextModule from '../../../context/AuthContext';
 import * as TelemetryContextModule from '../../../context/TelemetryContext';
@@ -41,6 +41,8 @@ describe('TanksView Component', () => {
     dailySavingsEur: 11.7,
     isBelowMinOperatingVolume: false,
     blendDeficitM3: 0,
+    irrigationMode: 'auto',
+    cumulativeTruckDeliveryCostEur: 0,
   };
 
   const depletedTelemetry: TelemetryState = {
@@ -73,6 +75,9 @@ describe('TanksView Component', () => {
       telemetry: null,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -85,6 +90,9 @@ describe('TanksView Component', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -103,6 +111,9 @@ describe('TanksView Component', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -134,6 +145,9 @@ describe('TanksView Component', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -151,6 +165,9 @@ describe('TanksView Component', () => {
       telemetry: depletedTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -169,6 +186,9 @@ describe('TanksView Component', () => {
       telemetry: normalTelemetry,
       setTankVolumes: vi.fn(),
       setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
     });
 
@@ -177,5 +197,41 @@ describe('TanksView Component', () => {
     // Min operating volume: 7.0 m³, Target: 28.0 m³
     expect(screen.getByText(/Min Operating: 7.0 m³/i)).toBeInTheDocument();
     expect(screen.getByText(/Target: 28.0 m³/i)).toBeInTheDocument();
+  });
+
+  it('renders supervisory controls and opens modals when quick action buttons are clicked', () => {
+    vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+      telemetry: normalTelemetry,
+      setTankVolumes: vi.fn(),
+      setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
+      resetToBaseline: vi.fn(),
+    });
+
+    render(<TanksView />);
+
+    // Supervisory mode selector should be present
+    expect(screen.getByText(/Irrigation Mode/i)).toBeInTheDocument();
+
+    // Quick action buttons should be present
+    const requestTruckBtn = screen.getByRole('button', { name: /Request Truck/i });
+    const pumpTransferBtn = screen.getByRole('button', { name: /Pump Transfer/i });
+    expect(requestTruckBtn).toBeInTheDocument();
+    expect(pumpTransferBtn).toBeInTheDocument();
+
+    // Open Water Truck Modal
+    fireEvent.click(requestTruckBtn);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText(/Request External Water Truck/i)).toBeInTheDocument();
+
+    // Close Water Truck Modal
+    fireEvent.click(screen.getByRole('button', { name: /Close dialog/i }));
+
+    // Open Pump Transfer Modal
+    fireEvent.click(pumpTransferBtn);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText(/Manual Pump Transfer/i)).toBeInTheDocument();
   });
 });
