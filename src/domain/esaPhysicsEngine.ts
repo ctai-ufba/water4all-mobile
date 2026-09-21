@@ -7,6 +7,7 @@
  */
 
 import {
+  AmbientConditions,
   ESAPhysicalParameters,
   DEFAULT_ESA_PARAMETERS,
   ESAProductionResult,
@@ -23,15 +24,12 @@ export const GAS_CONSTANT_J_PER_MOL_K = 8.314462618;
  * where R is the universal gas constant, T is the absolute temperature in Kelvin, and RH
  * is the ambient relative humidity.
  *
- * @param temperatureC - Ambient temperature in degrees Celsius (°C).
- * @param relativeHumidityPct - Ambient relative humidity in percent (0 to 100%).
+ * @param conditions - Ambient atmospheric conditions (dry-bulb temperature and relative humidity).
  * @returns Adsorption potential in Joules per mole (J/mol).
  * @throws Error if temperature is at or below absolute zero (-273.15 °C).
  */
-export function calculateAdsorptionPotential(
-  temperatureC: number,
-  relativeHumidityPct: number
-): number {
+export function calculateAdsorptionPotential(conditions: AmbientConditions): number {
+  const { temperatureC, relativeHumidityPct } = conditions;
   const temperatureK = temperatureC + 273.15;
   if (temperatureK <= 0) {
     throw new Error('Temperature must be above absolute zero (-273.15 °C).');
@@ -52,16 +50,14 @@ export function calculateAdsorptionPotential(
  * q = q_max * exp( - (A / E)^n ),
  * where A is adsorption potential, E is characteristic adsorption energy, and n is the Dubinin exponent.
  *
- * @param temperatureC - Ambient temperature in degrees Celsius (°C).
- * @param relativeHumidityPct - Ambient relative humidity in percent (0 to 100%).
+ * @param conditions - Ambient atmospheric conditions (dry-bulb temperature and relative humidity).
  * @param params - Physical ESA parameters (defaults to calibrated ACFF prototype parameters).
  * @param precomputedPotential - Optional precomputed adsorption potential in J/mol to avoid redundant evaluation.
  * @returns Equilibrium loading in kilograms of water per kilogram of sorbent (kg/kg).
  * @throws Error if temperature is below absolute zero.
  */
 export function calculateEquilibriumLoading(
-  temperatureC: number,
-  relativeHumidityPct: number,
+  conditions: AmbientConditions,
   params: ESAPhysicalParameters = DEFAULT_ESA_PARAMETERS,
   precomputedPotential?: number
 ): number {
@@ -69,7 +65,7 @@ export function calculateEquilibriumLoading(
   const potential =
     precomputedPotential !== undefined
       ? precomputedPotential
-      : calculateAdsorptionPotential(temperatureC, relativeHumidityPct);
+      : calculateAdsorptionPotential(conditions);
 
   // Dubinin-Astakhov isotherm calculation
   const safeEnergy = Math.max(params.characteristicEnergyJPerMol, 1e-12);
@@ -85,16 +81,14 @@ export function calculateEquilibriumLoading(
  * @description Determines water collected per cycle accounting for sorbent mass, desorption recovery,
  * condenser thermal capacity limit, and scales by the farm profile's nominal installed capacity.
  *
- * @param temperatureC - Ambient dry-bulb temperature in degrees Celsius (°C).
- * @param relativeHumidityPct - Ambient relative humidity in percent (0 to 100%).
+ * @param conditions - Ambient atmospheric conditions (dry-bulb temperature and relative humidity).
  * @param nominalCapacityM3PerDay - Nominal rated capacity of installed farm system in m³/day.
  * @param params - Calibrated physical ESA parameters (defaults to DEFAULT_ESA_PARAMETERS).
  * @returns ESAProductionResult containing hourly and daily production rates, loading, and efficiency.
  * @throws Error if temperature is below absolute zero.
  */
 export function calculateESAWaterProduction(
-  temperatureC: number,
-  relativeHumidityPct: number,
+  conditions: AmbientConditions,
   nominalCapacityM3PerDay: number,
   params: ESAPhysicalParameters = DEFAULT_ESA_PARAMETERS
 ): ESAProductionResult {
@@ -102,10 +96,9 @@ export function calculateESAWaterProduction(
   const safeNominal = Math.max(0, nominalCapacityM3PerDay);
 
   // 1. Calculate thermodynamics and equilibrium loading (reusing precomputed potential)
-  const adsorptionPotential = calculateAdsorptionPotential(temperatureC, relativeHumidityPct);
+  const adsorptionPotential = calculateAdsorptionPotential(conditions);
   const equilibriumLoading = calculateEquilibriumLoading(
-    temperatureC,
-    relativeHumidityPct,
+    conditions,
     params,
     adsorptionPotential
   );

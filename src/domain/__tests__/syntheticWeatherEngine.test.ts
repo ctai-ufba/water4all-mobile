@@ -28,12 +28,12 @@ describe('Synthetic Weather Engine Seam', () => {
 
   describe('calculateDewPointC', () => {
     it('equals dry-bulb temperature at 100% relative humidity', () => {
-      const dewPoint = calculateDewPointC(20, 100);
+      const dewPoint = calculateDewPointC({ temperatureC: 20, relativeHumidityPct: 100 });
       expect(dewPoint).toBeCloseTo(20, 1);
     });
 
     it('is strictly lower than dry-bulb temperature when relative humidity < 100%', () => {
-      const dewPoint = calculateDewPointC(25, 50);
+      const dewPoint = calculateDewPointC({ temperatureC: 25, relativeHumidityPct: 50 });
       expect(dewPoint).toBeLessThan(25);
       expect(dewPoint).toBeGreaterThan(10);
     });

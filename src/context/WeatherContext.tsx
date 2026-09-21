@@ -113,8 +113,7 @@ export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.E
       return null;
     }
     return calculateESAWaterProduction(
-      weather.temperatureC,
-      weather.relativeHumidityPct,
+      weather,
       activeFarm.esaNominalCapacityM3PerDay
     );
   }, [activeFarm, weather]);

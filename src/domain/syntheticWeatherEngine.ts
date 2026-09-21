@@ -6,7 +6,7 @@
  * Mediterranean climate curves from prototipo_water4all.
  */
 
-import { WeatherData } from '../types/weather';
+import { AmbientConditions, WeatherData } from '../types/weather';
 
 /** Monthly baseline mean dry-bulb temperatures for Mediterranean regions (°C) */
 export const MONTHLY_MEAN_TEMPERATURE_C = [
@@ -49,15 +49,12 @@ export function calculateSaturationVaporPressureKPa(temperatureC: number): numbe
  * @description Derives dew point from ambient temperature and relative humidity
  * by inverting the Magnus formula.
  *
- * @param temperatureC - Temperature in degrees Celsius (°C).
- * @param relativeHumidityPct - Relative humidity in percent (0 to 100%).
+ * @param conditions - Ambient atmospheric conditions (dry-bulb temperature and relative humidity).
  * @returns Dew point temperature in degrees Celsius (°C).
  * @throws Never throws.
  */
-export function calculateDewPointC(
-  temperatureC: number,
-  relativeHumidityPct: number
-): number {
+export function calculateDewPointC(conditions: AmbientConditions): number {
+  const { temperatureC, relativeHumidityPct } = conditions;
   const boundedRh = Math.min(100.0, Math.max(0.1, relativeHumidityPct)) / 100.0;
   const gamma = Math.log(boundedRh) + (17.625 * temperatureC) / (243.04 + temperatureC);
   return (243.04 * gamma) / (17.625 - gamma);
@@ -120,7 +117,7 @@ export function generateSyntheticWeather(
   const monthlyRain = smoothMonthly(MONTHLY_PRECIPITATION_MM, dayOfYear);
 
   // 2. Compute dew point from daily means
-  const dewPoint = calculateDewPointC(meanTemp, meanRh);
+  const dewPoint = calculateDewPointC({ temperatureC: meanTemp, relativeHumidityPct: meanRh });
   const vaporPressure = calculateSaturationVaporPressureKPa(dewPoint);
 
   // 3. Hourly temperature variation (troughs at 03:00, peaks around 15:00 solar time)

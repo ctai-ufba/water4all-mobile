@@ -7,13 +7,19 @@
  */
 
 /**
- * Ambient weather observation and forecast data.
+ * Ambient atmospheric conditions pair (dry-bulb temperature and relative humidity).
  */
-export interface WeatherData {
+export interface AmbientConditions {
   /** Current ambient dry-bulb temperature in degrees Celsius (°C) */
   temperatureC: number;
   /** Current ambient relative humidity percentage (0 - 100%) */
   relativeHumidityPct: number;
+}
+
+/**
+ * Ambient weather observation and forecast data.
+ */
+export interface WeatherData extends AmbientConditions {
   /** Instantaneous precipitation rate in millimeters (mm) */
   currentPrecipitationMm: number;
   /** Forecasted cumulative precipitation over the next 24 hours in millimeters (mm) */
