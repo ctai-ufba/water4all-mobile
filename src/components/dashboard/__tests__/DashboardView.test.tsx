@@ -99,6 +99,7 @@ describe('DashboardView Seam', () => {
         forecastInflowM3: 0.65,
       },
       refetch: vi.fn(),
+      setCustomWeather: vi.fn(),
     });
   });
 
@@ -119,6 +120,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -145,6 +147,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -172,6 +175,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -210,6 +214,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -238,6 +243,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -265,6 +271,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -289,6 +296,7 @@ describe('DashboardView Seam', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<DashboardView />);

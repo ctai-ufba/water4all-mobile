@@ -61,6 +61,7 @@ describe('WeatherCard Component Seam', () => {
       esaProduction: mockEsaProduction,
       catchmentEstimate: mockCatchmentEstimate,
       refetch: vi.fn(),
+      setCustomWeather: vi.fn(),
     });
 
     render(<WeatherCard />);
@@ -79,6 +80,7 @@ describe('WeatherCard Component Seam', () => {
       esaProduction: mockEsaProduction,
       catchmentEstimate: mockCatchmentEstimate,
       refetch: vi.fn(),
+      setCustomWeather: vi.fn(),
     });
 
     render(<WeatherCard />);
@@ -94,6 +96,7 @@ describe('WeatherCard Component Seam', () => {
       esaProduction: mockEsaProduction,
       catchmentEstimate: mockCatchmentEstimate,
       refetch: vi.fn(),
+      setCustomWeather: vi.fn(),
     });
 
     render(<WeatherCard />);
@@ -115,6 +118,7 @@ describe('WeatherCard Component Seam', () => {
       esaProduction: mockEsaProduction,
       catchmentEstimate: mockCatchmentEstimate,
       refetch: vi.fn(),
+      setCustomWeather: vi.fn(),
     });
 
     render(<WeatherCard />);
@@ -130,6 +134,7 @@ describe('WeatherCard Component Seam', () => {
       esaProduction: mockEsaProduction,
       catchmentEstimate: mockCatchmentEstimate,
       refetch: refetchMock,
+      setCustomWeather: vi.fn(),
     });
 
     render(<WeatherCard />);

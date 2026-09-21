@@ -63,6 +63,7 @@ describe('Supervisory Controls Components', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
   });
 
@@ -89,6 +90,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: vi.fn(),
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<IrrigationModeSelector />);
@@ -139,6 +141,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: requestTruckMock,
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
@@ -168,6 +171,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: vi.fn(),
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
@@ -194,6 +198,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: vi.fn(),
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -222,6 +227,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: vi.fn(),
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -249,6 +255,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: vi.fn(),
         executePumpTransfer: executePumpTransferMock,
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -281,6 +288,7 @@ describe('Supervisory Controls Components', () => {
         requestWaterTruck: vi.fn(),
         executePumpTransfer: executePumpTransferMock,
         resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);

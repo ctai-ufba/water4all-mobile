@@ -24,6 +24,7 @@ import {
   PumpTransferResult,
   WaterTruckDeliveryResult,
   TransferSourceTank,
+  TelemetrySnapshot,
 } from '../types/telemetry';
 import { computeTelemetryState } from '../domain/telemetryEngine';
 import {
@@ -116,6 +117,18 @@ export interface TelemetryContextType {
    * @throws Never throws.
    */
   resetToBaseline: () => void;
+  /**
+   * Atomically applies a telemetry snapshot (volumes, flows, truck costs, and irrigation mode).
+   *
+   * @summary Apply telemetry snapshot.
+   * @description Sets reservoir volumes, water flows, cumulative truck costs, and irrigation
+   * mode in a single coordinated transition, persisting values to localStorage.
+   *
+   * @param snapshot - Complete or partial telemetry snapshot to apply.
+   * @returns void
+   * @throws Never throws.
+   */
+  applySnapshot: (snapshot: TelemetrySnapshot) => void;
 }
 
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
@@ -460,6 +473,59 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
     }
   };
 
+  /**
+   * Atomically applies a telemetry snapshot (volumes, flows, truck costs, and irrigation mode).
+   *
+   * @summary Apply telemetry snapshot.
+   * @description Sets reservoir volumes, water flows, cumulative truck costs, and irrigation
+   * mode in a single coordinated transition, persisting values to localStorage.
+   *
+   * @param snapshot - Complete or partial telemetry snapshot to apply.
+   * @returns void
+   * @throws Never throws.
+   */
+  const applySnapshot = (snapshot: TelemetrySnapshot): void => {
+    setVolumes(snapshot.volumes);
+    if (snapshot.flows) {
+      setFlowsState(snapshot.flows);
+    }
+    if (snapshot.cumulativeTruckCost !== undefined) {
+      setCumulativeTruckCost(snapshot.cumulativeTruckCost);
+    }
+    if (snapshot.irrigationMode) {
+      setIrrigationModeState(snapshot.irrigationMode);
+    }
+
+    if (activeFarm) {
+      try {
+        localStorage.setItem(
+          `${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`,
+          JSON.stringify(snapshot.volumes)
+        );
+        if (snapshot.flows) {
+          localStorage.setItem(
+            `${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`,
+            JSON.stringify(snapshot.flows)
+          );
+        }
+        if (snapshot.cumulativeTruckCost !== undefined) {
+          localStorage.setItem(
+            `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
+            JSON.stringify(snapshot.cumulativeTruckCost)
+          );
+        }
+        if (snapshot.irrigationMode) {
+          localStorage.setItem(
+            `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+            JSON.stringify(snapshot.irrigationMode)
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to persist snapshot to localStorage:', e);
+      }
+    }
+  };
+
   // Recompute consolidated telemetry whenever activeFarm, volumes, flows, or supervisory states change
   const telemetry = useMemo<TelemetryState | null>(() => {
     if (!activeFarm || !volumes || !flows) {
@@ -483,6 +549,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       requestWaterTruck,
       executePumpTransfer,
       resetToBaseline,
+      applySnapshot,
     }),
     [telemetry]
   );

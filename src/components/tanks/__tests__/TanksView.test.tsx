@@ -79,6 +79,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);
@@ -94,6 +95,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);
@@ -115,6 +117,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);
@@ -149,6 +152,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);
@@ -169,6 +173,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);
@@ -190,6 +195,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);
@@ -208,6 +214,7 @@ describe('TanksView Component', () => {
       requestWaterTruck: vi.fn(),
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
     });
 
     render(<TanksView />);

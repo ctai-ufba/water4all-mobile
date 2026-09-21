@@ -9,6 +9,7 @@ import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TelemetryProvider } from './context/TelemetryContext';
 import { WeatherProvider } from './context/WeatherContext';
+import { DemoProvider } from './context/DemoContext';
 import { DemoLoginScreen } from './components/auth/DemoLoginScreen';
 import { AppShell, NavTab } from './components/layout/AppShell';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -82,7 +83,9 @@ export default function App(): React.JSX.Element {
     <AuthProvider>
       <TelemetryProvider>
         <WeatherProvider>
-          <AppContent />
+          <DemoProvider>
+            <AppContent />
+          </DemoProvider>
         </WeatherProvider>
       </TelemetryProvider>
     </AuthProvider>

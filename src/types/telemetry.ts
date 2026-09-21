@@ -149,6 +149,20 @@ export interface FarmBaselineData {
 }
 
 /**
+ * Snapshot payload representing a farm telemetry state configuration for snapshots and overrides.
+ */
+export interface TelemetrySnapshot {
+  /** Physical storage volumes in m³ across all reservoirs */
+  volumes: TankVolumeMetrics;
+  /** Inflow and consumption flow rates in m³/day */
+  flows?: WaterFlowMetrics;
+  /** Cumulative water truck delivery expense in EUR */
+  cumulativeTruckCost?: number;
+  /** Active operational mode of the irrigation network */
+  irrigationMode?: IrrigationMode;
+}
+
+/**
  * Pre-calibrated baseline telemetry metrics for each Mediterranean farm profile.
  */
 export const BASELINE_TELEMETRY: Record<FarmId, FarmBaselineData> = {

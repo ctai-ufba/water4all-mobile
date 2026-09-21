@@ -46,6 +46,18 @@ export interface WeatherContextType {
    * @throws Never throws.
    */
   refetch: () => Promise<void>;
+  /**
+   * Sets a custom weather override for demo scenarios or resets to live weather.
+   *
+   * @summary Set custom weather override.
+   * @description Overrides ambient weather with simulated scenario data (e.g. Drought, Storm),
+   * or reverts to live Open-Meteo weather when passed null.
+   *
+   * @param weather - Custom WeatherData or null to clear override.
+   * @returns void
+   * @throws Never throws.
+   */
+  setCustomWeather: (weather: WeatherData | null) => void;
 }
 
 const WeatherContext = createContext<WeatherContextType | undefined>(undefined);
@@ -73,6 +85,7 @@ export interface WeatherProviderProps {
 export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.Element {
   const { activeFarm } = useAuth();
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [customWeather, setCustomWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
   /**
@@ -102,42 +115,47 @@ export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.E
     }
   }, [activeFarm]);
 
-  // Automatically fetch weather when the active farm profile changes
+  // Automatically fetch weather and reset custom overrides when active farm changes
   useEffect(() => {
+    setCustomWeather(null);
     loadWeather();
   }, [loadWeather]);
 
+  // Effective weather prioritizes scenario overrides when active
+  const effectiveWeather = customWeather ?? weather;
+
   // Compute live ESA atmospheric water generation based on ambient temperature and relative humidity
   const esaProduction = useMemo<ESAProductionResult | null>(() => {
-    if (!activeFarm || !weather) {
+    if (!activeFarm || !effectiveWeather) {
       return null;
     }
     return calculateESAWaterProduction(
-      weather,
+      effectiveWeather,
       activeFarm.esaNominalCapacityM3PerDay
     );
-  }, [activeFarm, weather]);
+  }, [activeFarm, effectiveWeather]);
 
   // Compute estimated rainwater catchment inflow from 24h precipitation forecast
   const catchmentEstimate = useMemo<CatchmentEstimateResult | null>(() => {
-    if (!activeFarm || !weather) {
+    if (!activeFarm || !effectiveWeather) {
       return null;
     }
     return calculateCatchmentInflow(
-      weather.precipitationForecast24hMm,
+      effectiveWeather.precipitationForecast24hMm,
       activeFarm.catchmentAreaM2
     );
-  }, [activeFarm, weather]);
+  }, [activeFarm, effectiveWeather]);
 
   const contextValue = useMemo<WeatherContextType>(
     () => ({
-      weather,
+      weather: effectiveWeather,
       loading,
       esaProduction,
       catchmentEstimate,
       refetch: loadWeather,
+      setCustomWeather,
     }),
-    [weather, loading, esaProduction, catchmentEstimate, loadWeather]
+    [effectiveWeather, loading, esaProduction, catchmentEstimate, loadWeather]
   );
 
   return (

@@ -122,13 +122,16 @@ describe('App Root Flow Seam', () => {
     expect(screen.getByText(/FAO Agricultural Compliance Matrix/i)).toBeInTheDocument();
     expect(screen.getByText(/Blend Tank Live Telemetry/i)).toBeInTheDocument();
 
-    // Click 'Demo' tab (not yet implemented) and verify fallback to AppShell placeholder
-    const demoNavButton = screen.getByRole('button', { name: /^demo$/i });
-    fireEvent.click(demoNavButton);
+    // Click Demo floating presentation trigger and verify Demo Controller Drawer opens
+    const demoTrigger = screen.getByTestId('demo-floating-trigger');
+    fireEvent.click(demoTrigger);
 
     await waitFor(() => {
-      expect(screen.getByText(/Demo View/i)).toBeInTheDocument();
-      expect(screen.getByText(/Module scheduled for upcoming implementation phase/i)).toBeInTheDocument();
+      expect(screen.getByTestId('demo-controller-drawer')).toBeInTheDocument();
+      expect(screen.getByText('Demo Controller')).toBeInTheDocument();
+      expect(screen.getByText(/Virtual Time Acceleration/i)).toBeInTheDocument();
+      expect(screen.getByText(/Simulated Scenarios/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Run System Optimization/i })).toBeInTheDocument();
     });
   });
 });

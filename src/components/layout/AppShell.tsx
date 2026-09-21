@@ -6,13 +6,16 @@
  */
 
 import React, { ReactNode, useState } from 'react';
-import { LayoutDashboard, CloudSun, Cylinder, ShieldCheck, Sliders } from 'lucide-react';
+import { LayoutDashboard, CloudSun, Cylinder, ShieldCheck } from 'lucide-react';
 import { Header } from './Header';
+import { DemoControllerDrawer } from '../demo/DemoControllerDrawer';
+import { OptimizationProgressModal } from '../demo/OptimizationProgressModal';
+import { DemoFloatingTrigger } from '../demo/DemoFloatingTrigger';
 
 /**
  * Available primary navigation tab identifiers.
  */
-export type NavTab = 'dashboard' | 'weather' | 'tanks' | 'quality' | 'demo';
+export type NavTab = 'dashboard' | 'weather' | 'tanks' | 'quality';
 
 /**
  * Props for the AppShell component.
@@ -38,7 +41,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'weather', label: 'Weather', icon: CloudSun },
   { id: 'tanks', label: 'Tanks', icon: Cylinder },
   { id: 'quality', label: 'Quality', icon: ShieldCheck },
-  { id: 'demo', label: 'Demo', icon: Sliders },
 ];
 
 /**
@@ -104,6 +106,15 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
         <main className="flex-1 overflow-y-auto px-4 py-4 pb-20">
           {renderContent()}
         </main>
+
+        {/* Persistent Floating Demo Presentation Trigger */}
+        <DemoFloatingTrigger />
+
+        {/* Slide-over Demo Controller Drawer */}
+        <DemoControllerDrawer />
+
+        {/* 2-Second Animated Optimization Progress Modal */}
+        <OptimizationProgressModal />
 
         {/* Bottom Navigation Bar */}
         <nav
