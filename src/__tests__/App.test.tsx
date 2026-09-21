@@ -72,4 +72,52 @@ describe('App Root Flow Seam', () => {
       expect(screen.getByText(/Select Demo Farm Profile/i)).toBeInTheDocument();
     });
   });
+
+  it('switches between Dashboard and Tanks & Sources screen via bottom navigation', async () => {
+    render(<App />);
+
+    // Login to small farm
+    const smallFarmButton = screen.getByRole('button', {
+      name: new RegExp(FARM_PROFILES['small-farm'].name, 'i'),
+    });
+    fireEvent.click(smallFarmButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(FARM_PROFILES['small-farm'].name)).toBeInTheDocument();
+    });
+
+    // Verify initial dashboard view
+    expect(screen.getByText(/Water Autonomy/i)).toBeInTheDocument();
+
+    // Click 'Tanks' tab on bottom navigation
+    const tanksNavButton = screen.getByRole('button', { name: /^tanks$/i });
+    fireEvent.click(tanksNavButton);
+
+    // Verify Tanks & Sources screen is rendered with all 4 tanks
+    await waitFor(() => {
+      expect(screen.getByText(/Tanks & Sources/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Rainwater Catchment/i)).toBeInTheDocument();
+    expect(screen.getByText(/ESA Atmospheric Generator/i)).toBeInTheDocument();
+    expect(screen.getByText(/External Water Supply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Central Blend Tank/i)).toBeInTheDocument();
+
+    // Switch back to Dashboard tab
+    const dashboardNavButton = screen.getByRole('button', { name: /^dashboard$/i });
+    fireEvent.click(dashboardNavButton);
+
+    // Verify Dashboard view is restored
+    await waitFor(() => {
+      expect(screen.getByText(/Water Autonomy/i)).toBeInTheDocument();
+    });
+
+    // Click 'Weather' tab (not yet implemented) and verify fallback to AppShell placeholder
+    const weatherNavButton = screen.getByRole('button', { name: /^weather$/i });
+    fireEvent.click(weatherNavButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Weather View/i)).toBeInTheDocument();
+      expect(screen.getByText(/Module scheduled for upcoming implementation phase/i)).toBeInTheDocument();
+    });
+  });
 });

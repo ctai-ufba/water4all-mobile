@@ -10,15 +10,40 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { TelemetryProvider } from './context/TelemetryContext';
 import { WeatherProvider } from './context/WeatherContext';
 import { DemoLoginScreen } from './components/auth/DemoLoginScreen';
-import { AppShell } from './components/layout/AppShell';
+import { AppShell, NavTab } from './components/layout/AppShell';
 import { DashboardView } from './components/dashboard/DashboardView';
+import { TanksView } from './components/tanks/TanksView';
+
+/**
+ * Resolves the view component corresponding to the active navigation tab.
+ *
+ * @summary Tab view router.
+ * @description Maps the selected navigation tab to its corresponding top-level screen:
+ * - 'tanks': Renders the dedicated TanksView monitoring screen.
+ * - 'dashboard': Renders the primary DashboardView overview.
+ * - other tabs: Returns undefined to allow AppShell to render the module placeholder.
+ *
+ * @param activeTab - Identifier of the currently selected navigation tab.
+ * @returns React.ReactNode representing the view component, or undefined for unhandled tabs.
+ * @throws Never throws.
+ */
+function renderAppTab(activeTab: NavTab): React.ReactNode {
+  switch (activeTab) {
+    case 'tanks':
+      return <TanksView />;
+    case 'dashboard':
+      return <DashboardView />;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Inner application controller that accesses authentication context.
  *
  * @summary Main content router.
  * @description Selects either DemoLoginScreen (if unauthenticated) or AppShell
- * with DashboardView (if authenticated with an active Mediterranean farm profile).
+ * with active tab routing (DashboardView, TanksView, etc.) when authenticated.
  *
  * @returns React.JSX.Element representing the current application view.
  * @throws Never throws.
@@ -31,10 +56,10 @@ function AppContent(): React.JSX.Element {
     return <DemoLoginScreen />;
   }
 
-  // When authenticated, display the mobile app shell with dashboard overview
+  // When authenticated, display the mobile app shell with active tab rendering
   return (
     <AppShell>
-      <DashboardView />
+      {renderAppTab}
     </AppShell>
   );
 }

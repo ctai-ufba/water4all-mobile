@@ -55,14 +55,27 @@ const NAV_ITEMS: NavItem[] = [
 export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<NavTab>(initialTab);
 
-  // Render view content based on activeTab
+  /**
+   * Resolves and renders the view content corresponding to the active navigation tab.
+   *
+   * @summary Render active tab view.
+   * @description Evaluates children (whether passed as a functional render prop or static ReactNode)
+   * against the currently selected tab. Falls back to a standard module placeholder for
+   * tabs not yet implemented or returning null/undefined.
+   *
+   * @returns ReactNode representing the view component to display in the main content slot.
+   * @throws Never throws.
+   */
   const renderContent = (): ReactNode => {
     if (typeof children === 'function') {
-      return children(activeTab);
+      const rendered = children(activeTab);
+      if (rendered !== undefined && rendered !== null) {
+        return rendered;
+      }
     }
 
     // When static children are provided, render them on dashboard tab
-    if (activeTab === 'dashboard' && children) {
+    if (activeTab === 'dashboard' && typeof children !== 'function' && children) {
       return children;
     }
 
