@@ -6,11 +6,12 @@
  * daily water balance card (inflow vs. consumption, surplus/deficit), and water efficiency card.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { DashboardView } from '../DashboardView';
 import * as AuthContextModule from '../../../context/AuthContext';
 import * as TelemetryContextModule from '../../../context/TelemetryContext';
+import * as WeatherContextModule from '../../../context/WeatherContext';
 import { FARM_PROFILES } from '../../../types/farm';
 import { TelemetryState } from '../../../types/telemetry';
 
@@ -66,6 +67,61 @@ describe('DashboardView Seam', () => {
     localWaterPercentage: 55,
     dailySavingsEur: 16.2,
   };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
+      weather: {
+        temperatureC: 22.0,
+        relativeHumidityPct: 60,
+        currentPrecipitationMm: 0,
+        precipitationForecast24hMm: 2.0,
+        isOfflineFallback: false,
+        timestamp: '2026-09-20T12:00:00Z',
+      },
+      loading: false,
+      esaProduction: {
+        hourlyRateLiters: 40.0,
+        hourlyRateM3: 0.04,
+        dailyRateM3: 0.96,
+        adsorptionPotentialJPerMol: 1200,
+        equilibriumLoadingKgPerKg: 0.15,
+        efficiencyFactor: 0.8,
+      },
+      catchmentEstimate: {
+        catchmentAreaM2: 380,
+        precipitationForecastMm: 2.0,
+        runoffCoefficient: 0.9,
+        firstFlushFactor: 0.95,
+        effectiveRunoff: 0.855,
+        forecastInflowM3: 0.65,
+      },
+      refetch: vi.fn(),
+    });
+  });
+
+  it('renders Live Weather & Physics card with ambient metrics', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm: mockFarm,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+      switchFarm: vi.fn(),
+    });
+
+    vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+      telemetry: normalTelemetry,
+      setTankVolumes: vi.fn(),
+      setFlows: vi.fn(),
+      resetToBaseline: vi.fn(),
+    });
+
+    render(<DashboardView />);
+
+    expect(screen.getByText(/Live Weather/i)).toBeInTheDocument();
+    expect(screen.getByText('Ambient Conditions & Generation')).toBeInTheDocument();
+    expect(screen.getByText('Open-Meteo Live')).toBeInTheDocument();
+  });
 
   it('renders "Water Autonomy in Days" prominently', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({

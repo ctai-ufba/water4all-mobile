@@ -13,6 +13,7 @@ import { BlendTankGauge } from './BlendTankGauge';
 import { BlendTankAlert } from './BlendTankAlert';
 import { DailyWaterBalanceCard } from './DailyWaterBalanceCard';
 import { WaterEfficiencyCard } from './WaterEfficiencyCard';
+import { WeatherCard } from './WeatherCard';
 
 /**
  * Primary Dashboard screen component.
@@ -81,6 +82,9 @@ export function DashboardView(): React.JSX.Element {
           deficitM3={telemetry.blendDeficitM3}
         />
       )}
+
+      {/* Live Weather & Physics Generation Card */}
+      <WeatherCard />
 
       {/* Water Autonomy in Days Card */}
       <WaterAutonomyCard

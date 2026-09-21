@@ -8,6 +8,7 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TelemetryProvider } from './context/TelemetryContext';
+import { WeatherProvider } from './context/WeatherContext';
 import { DemoLoginScreen } from './components/auth/DemoLoginScreen';
 import { AppShell } from './components/layout/AppShell';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -42,7 +43,7 @@ function AppContent(): React.JSX.Element {
  * Root Application entry component.
  *
  * @summary Root component.
- * @description Wraps the application with AuthProvider and TelemetryProvider to provide farm session context.
+ * @description Wraps the application with AuthProvider, TelemetryProvider, and WeatherProvider.
  *
  * @returns React.JSX.Element representing the root application.
  * @throws Never throws.
@@ -51,7 +52,9 @@ export default function App(): React.JSX.Element {
   return (
     <AuthProvider>
       <TelemetryProvider>
-        <AppContent />
+        <WeatherProvider>
+          <AppContent />
+        </WeatherProvider>
       </TelemetryProvider>
     </AuthProvider>
   );

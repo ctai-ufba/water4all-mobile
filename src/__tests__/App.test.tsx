@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App';
 import { FARM_PROFILES } from '../types/farm';
 
@@ -23,7 +23,7 @@ describe('App Root Flow Seam', () => {
     expect(screen.getByText(new RegExp(FARM_PROFILES['medium-farm'].name, 'i'))).toBeInTheDocument();
   });
 
-  it('completes 1-click login and transitions to AppShell', () => {
+  it('completes 1-click login and transitions to AppShell', async () => {
     render(<App />);
 
     const smallFarmButton = screen.getByRole('button', {
@@ -31,21 +31,25 @@ describe('App Root Flow Seam', () => {
     });
     fireEvent.click(smallFarmButton);
 
-    // Farm name is displayed in the active view
-    expect(screen.getByText(FARM_PROFILES['small-farm'].name)).toBeInTheDocument();
+    // Wait for async weather loading and state updates
+    await waitFor(() => {
+      expect(screen.getByText(FARM_PROFILES['small-farm'].name)).toBeInTheDocument();
+    });
+
     expect(screen.getAllByText(FARM_PROFILES['small-farm'].estateName).length).toBeGreaterThanOrEqual(1);
 
     // App navigation is present
     expect(screen.getByRole('navigation')).toBeInTheDocument();
 
-    // Dashboard telemetry cards are displayed
+    // Dashboard telemetry and weather cards are displayed
+    expect(screen.getByText(/Live Weather/i)).toBeInTheDocument();
     expect(screen.getByText(/Water Autonomy/i)).toBeInTheDocument();
     expect(screen.getByText(/Blend Tank Gauge/i)).toBeInTheDocument();
     expect(screen.getByText(/Daily Water Balance/i)).toBeInTheDocument();
     expect(screen.getByText(/Water Efficiency & Savings/i)).toBeInTheDocument();
   });
 
-  it('logs out and returns to DemoLoginScreen', () => {
+  it('logs out and returns to DemoLoginScreen', async () => {
     render(<App />);
 
     // Login
@@ -54,12 +58,18 @@ describe('App Root Flow Seam', () => {
     });
     fireEvent.click(smallFarmButton);
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /logout|sign out/i })).toBeInTheDocument();
+    });
+
     // Logout
     const logoutButton = screen.getByRole('button', { name: /logout|sign out/i });
     fireEvent.click(logoutButton);
 
     // Assert returned to DemoLoginScreen
-    expect(screen.getByText('Water4All')).toBeInTheDocument();
-    expect(screen.getByText(/Select Demo Farm Profile/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Water4All')).toBeInTheDocument();
+      expect(screen.getByText(/Select Demo Farm Profile/i)).toBeInTheDocument();
+    });
   });
 });

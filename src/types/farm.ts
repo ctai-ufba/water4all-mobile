@@ -55,6 +55,10 @@ export interface FarmProfile {
   coordinates: Coordinates;
   /** Total cultivated farm area in hectares (ha) */
   areaHa: number;
+  /** Rainwater catchment collection surface area in square meters (m²) */
+  catchmentAreaM2: number;
+  /** Nominal daily water production capacity of installed ESA unit in m³/day */
+  esaNominalCapacityM3PerDay: number;
   /** Cultivated crop types and agricultural activities */
   crops: string[];
   /** Baseline storage capacities in cubic meters */
@@ -79,6 +83,8 @@ export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
       longitude: -4.5612,
     },
     areaHa: 1.84,
+    catchmentAreaM2: 380.0,
+    esaNominalCapacityM3PerDay: 1.2,
     crops: ['Olive trees', 'Vineyards'],
     tankCapacities: {
       rainwater: 45.0,
@@ -100,6 +106,8 @@ export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
       longitude: 25.1442,
     },
     areaHa: 4.6,
+    catchmentAreaM2: 950.0,
+    esaNominalCapacityM3PerDay: 2.8,
     crops: ['Olive trees', 'Vineyards', 'Greenhouse vegetables', 'Livestock'],
     tankCapacities: {
       rainwater: 120.0,
