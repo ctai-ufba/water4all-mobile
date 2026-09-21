@@ -13,12 +13,14 @@ import { DemoLoginScreen } from './components/auth/DemoLoginScreen';
 import { AppShell, NavTab } from './components/layout/AppShell';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { TanksView } from './components/tanks/TanksView';
+import { QualityView } from './components/quality/QualityView';
 
 /**
  * Resolves the view component corresponding to the active navigation tab.
  *
  * @summary Tab view router.
  * @description Maps the selected navigation tab to its corresponding top-level screen:
+ * - 'quality': Renders the dedicated Water Quality & FAO Crop Compliance screen.
  * - 'tanks': Renders the dedicated TanksView monitoring screen.
  * - 'dashboard': Renders the primary DashboardView overview.
  * - other tabs: Returns undefined to allow AppShell to render the module placeholder.
@@ -29,6 +31,8 @@ import { TanksView } from './components/tanks/TanksView';
  */
 function renderAppTab(activeTab: NavTab): React.ReactNode {
   switch (activeTab) {
+    case 'quality':
+      return <QualityView />;
     case 'tanks':
       return <TanksView />;
     case 'dashboard':

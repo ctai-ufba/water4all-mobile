@@ -111,12 +111,23 @@ describe('App Root Flow Seam', () => {
       expect(screen.getByText(/Water Autonomy/i)).toBeInTheDocument();
     });
 
-    // Click 'Weather' tab (not yet implemented) and verify fallback to AppShell placeholder
-    const weatherNavButton = screen.getByRole('button', { name: /^weather$/i });
-    fireEvent.click(weatherNavButton);
+    // Click 'Quality' tab on bottom navigation
+    const qualityNavButton = screen.getByRole('button', { name: /^quality$/i });
+    fireEvent.click(qualityNavButton);
+
+    // Verify Water Quality & FAO Compliance screen is rendered
+    await waitFor(() => {
+      expect(screen.getByText(/Water Quality & FAO Compliance/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/FAO Agricultural Compliance Matrix/i)).toBeInTheDocument();
+    expect(screen.getByText(/Blend Tank Live Telemetry/i)).toBeInTheDocument();
+
+    // Click 'Demo' tab (not yet implemented) and verify fallback to AppShell placeholder
+    const demoNavButton = screen.getByRole('button', { name: /^demo$/i });
+    fireEvent.click(demoNavButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Weather View/i)).toBeInTheDocument();
+      expect(screen.getByText(/Demo View/i)).toBeInTheDocument();
       expect(screen.getByText(/Module scheduled for upcoming implementation phase/i)).toBeInTheDocument();
     });
   });
