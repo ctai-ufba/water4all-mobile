@@ -12,6 +12,7 @@ import { AppShell } from '../AppShell';
 import * as AuthContextModule from '../../../context/AuthContext';
 import * as DemoContextModule from '../../../context/DemoContext';
 import * as TelemetryContextModule from '../../../context/TelemetryContext';
+import * as PwaContextModule from '../../../context/PwaContext';
 import { FARM_PROFILES } from '../../../types/farm';
 import { BASELINE_TELEMETRY } from '../../../types/telemetry';
 
@@ -40,6 +41,18 @@ describe('AppShell Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: BASELINE_TELEMETRY['small-farm'].flows.irrigationDemand,
+    });
+    // The shell mounts the offline indicator, the notification opt-in and the alert dock, all of
+    // which read PWA state; an online device with notifications already decided shows none of them.
+    vi.spyOn(PwaContextModule, 'usePwa').mockReturnValue({
+      isOnline: true,
+      canInstall: false,
+      promptInstall: vi.fn(),
+      dismissInstallBanner: vi.fn(),
+      notificationPermission: 'granted',
+      enableNotifications: vi.fn(),
+      activeAlerts: [],
+      dismissAlert: vi.fn(),
     });
     vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
       scenario: 'live',

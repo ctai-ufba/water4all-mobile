@@ -152,3 +152,17 @@ _Avoid_: Daily production, projected rate
 **Radar overlay**:
 The most recent published precipitation radar composite, drawn over the base map of the active farm's site. Coverage is not guaranteed for either location and a region without radar returns the same transparent tile as a region without rain, so the absence of echoes is always stated in words: left unexplained it reads as "no rain", which is a different claim from "no radar". It is served only to zoom 7; past that the host returns a fixed "zoom level not supported" image for every location, so deeper views upscale the last real composite locally.
 _Avoid_: Rain layer, weather map
+
+## 6. Field Delivery and Alerting
+
+**Critical alert**:
+A farm condition worth interrupting the operator for, wherever they are in the app: currently a Blend tank below its Minimum operating volume, and rain forecast over the next 24 hours. It is raised as an in-app toast always, and as an operating system notification only where the operator granted permission, so the toast is the primary channel rather than the fallback.
+_Avoid_: Notification, push, warning
+
+**Escalation step**:
+How bad one raising of a Critical alert is, as a coarse integer — the deficit floored to whole cubic metres, the forecast rounded to whole millimetres. Only its ordering against the deepest step already announced matters: a higher step is worse news and is announced again, an equal or lower one is the same situation or a recovering one and stays silent, so a refilling tank does not report the farm as critical at every cubic metre on the way up. A condition that clears is forgotten, and a breach that returns is announced afresh.
+_Avoid_: Alert key, dedup token, signature
+
+**Offline mode**:
+The state in which the device reports no connection. Tank volumes, controls and the whole simulation keep working, because they are computed on the device; only the weather reading is lost, and it is replaced by the synthetic series built from Climate normals rather than by a cached reading. Stated on screen, because an operator who cannot tell the two apart will read a stale number as a live one.
+_Avoid_: Disconnected, no signal, degraded mode

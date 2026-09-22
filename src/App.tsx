@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { TelemetryProvider } from './context/TelemetryContext';
 import { WeatherProvider } from './context/WeatherContext';
 import { DemoProvider } from './context/DemoContext';
+import { PwaProvider } from './context/PwaContext';
 import { DemoLoginScreen } from './components/auth/DemoLoginScreen';
 import { AppShell, NavTab, NavigateToTab } from './components/layout/AppShell';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -78,7 +79,9 @@ function AppContent(): React.JSX.Element {
  * Root Application entry component.
  *
  * @summary Root component.
- * @description Wraps the application with AuthProvider, TelemetryProvider, and WeatherProvider.
+ * @description Wraps the application with AuthProvider, TelemetryProvider, WeatherProvider,
+ * DemoProvider and PwaProvider. PwaProvider sits innermost because the critical alerts it raises
+ * are derived from the telemetry and weather the providers above it own.
  *
  * @returns React.JSX.Element representing the root application.
  * @throws Never throws.
@@ -89,7 +92,9 @@ export default function App(): React.JSX.Element {
       <TelemetryProvider>
         <WeatherProvider>
           <DemoProvider>
-            <AppContent />
+            <PwaProvider>
+              <AppContent />
+            </PwaProvider>
           </DemoProvider>
         </WeatherProvider>
       </TelemetryProvider>

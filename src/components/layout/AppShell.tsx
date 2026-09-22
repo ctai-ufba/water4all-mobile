@@ -11,6 +11,9 @@ import { Header } from './Header';
 import { DemoControllerDrawer } from '../demo/DemoControllerDrawer';
 import { OptimizationProgressModal } from '../demo/OptimizationProgressModal';
 import { DemoFloatingTrigger } from '../demo/DemoFloatingTrigger';
+import { NetworkStatusBanner } from '../pwa/NetworkStatusBanner';
+import { AlertPermissionPrompt } from '../pwa/AlertPermissionPrompt';
+import { PwaAlertDock } from '../pwa/PwaAlertDock';
 
 /**
  * Available primary navigation tab identifiers.
@@ -117,6 +120,10 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
         {/* Top Header */}
         <Header />
 
+        {/* Device status strips: offline mode, then the one-time notification opt-in */}
+        <NetworkStatusBanner />
+        <AlertPermissionPrompt />
+
         {/* Scrollable Main Content Area */}
         <main className="flex-1 overflow-y-auto px-4 py-4 pb-20">
           {renderContent()}
@@ -168,6 +175,9 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
             )
           </footer>
         </main>
+
+        {/* Critical alert toasts and the Add to Home Screen offer, docked above the demo trigger */}
+        <PwaAlertDock />
 
         {/* Persistent Floating Demo Presentation Trigger */}
         <DemoFloatingTrigger />

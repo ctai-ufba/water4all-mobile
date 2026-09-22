@@ -1,0 +1,35 @@
+{
+  "name": "Water4All - Farm Water Monitoring",
+  "short_name": "Water4All",
+  "description": "Monitor tank volumes, water quality and ESA production for Mediterranean farms, online or off.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": "./",
+  "id": "water4all-mobile",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#020617",
+  "background_color": "#020617",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
