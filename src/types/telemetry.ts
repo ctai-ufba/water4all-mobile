@@ -5,7 +5,7 @@
  * water flows, derived autonomy metrics, and daily balance.
  */
 
-import { FarmId } from './farm';
+import { FarmId, TankCapacities } from './farm';
 
 /**
  * Standard unit cost of external water truck deliveries in Mediterranean districts (EUR/m³).
@@ -82,12 +82,7 @@ export interface PumpTransferParams {
   /** Current volumes across all tanks in m³ */
   currentVolumes: TankVolumeMetrics;
   /** Physical capacities across all tanks in m³ */
-  capacities: {
-    rainwater: number;
-    esa: number;
-    external: number;
-    blend: number;
-  };
+  capacities: TankCapacities;
 }
 
 /**

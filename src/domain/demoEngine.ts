@@ -6,7 +6,7 @@
  * "High Salinity"), unoptimized baseline parameters, and pre-computed optimal parameters (ADR 0002).
  */
 
-import { FarmProfile, TankCapacities } from '../types/farm';
+import { FarmId, FarmProfile, TankCapacities } from '../types/farm';
 import {
   TankVolumeMetrics,
   WaterFlowMetrics,
@@ -28,8 +28,6 @@ import { calculateESAWaterProduction } from './esaPhysicsEngine';
  */
 export type DemoScenarioId = 'live' | 'drought' | 'storm' | 'salinity';
 
-export type { TelemetrySnapshot };
-
 /**
  * Optimization progress phase definition for the 2-second animated modal.
  */
@@ -40,7 +38,19 @@ export interface OptimizationPhaseInfo {
   progress: number;
   /** Human-readable status label explaining the algorithmic operation */
   label: string;
+  /**
+   * Short noun phrase naming the same operation in the progress modal's checklist.
+   *
+   * @remarks Held here rather than in the modal so the checklist cannot drift out of step with
+   * the progress thresholds it ticks off.
+   */
+  checklistLabel: string;
 }
+
+/**
+ * Total duration of the optimization progress animation, in milliseconds.
+ */
+export const OPTIMIZATION_DURATION_MS = 2000;
 
 /**
  * Sequence of optimization phases executed during the 2-second progress animation.
@@ -50,23 +60,36 @@ export const OPTIMIZATION_PHASES: OptimizationPhaseInfo[] = [
     startMs: 0,
     progress: 15,
     label: 'Analyzing local weather & solar irradiance...',
+    checklistLabel: 'Weather & Solar Irradiance Analysis',
   },
   {
     startMs: 500,
     progress: 50,
     label: 'Calibrating crop ET₀ & soil moisture deficit...',
+    checklistLabel: 'Crop ET₀ Demand & Deficit Calibration',
   },
   {
     startMs: 1100,
     progress: 80,
     label: 'Tuning Blend tank target volumes & mass balance...',
+    checklistLabel: 'Blend Tank Mass Balance Tuning',
   },
   {
     startMs: 1600,
     progress: 100,
     label: 'Optimal Design Applied (ADR 0002)',
+    checklistLabel: 'Optimal Design Applied (ADR 0002)',
   },
 ];
+
+/**
+ * Elapsed time at which the pre-computed optimal parameters are applied, in milliseconds.
+ *
+ * @remarks The final phase's start: the moment the progress bar reads 100% is the moment the
+ * optimized state lands, so the two cannot be scheduled independently.
+ */
+export const OPTIMIZATION_APPLY_AT_MS =
+  OPTIMIZATION_PHASES[OPTIMIZATION_PHASES.length - 1].startMs;
 
 /**
  * Calibrated crop irrigation schedules per farm profile, in m³/day.
@@ -91,7 +114,7 @@ const MEDIUM_FARM_UNOPTIMIZED_SCHEDULE = 7.2;
 /**
  * Pre-computed optimal parameters adhering to ADR 0002 for Mediterranean farm profiles.
  */
-export const OPTIMAL_FARM_PARAMETERS: Record<string, TelemetrySnapshot> = {
+export const OPTIMAL_FARM_PARAMETERS: Record<FarmId, TelemetrySnapshot> = {
   'small-farm': {
     volumes: {
       rainwater: 36.0, // 80% capacity buffer (45 m³)
@@ -136,7 +159,7 @@ export const OPTIMAL_FARM_PARAMETERS: Record<string, TelemetrySnapshot> = {
  * Pre-calibrated unoptimized baseline parameters for Mediterranean farm profiles.
  * Exhibits depleted tanks below minimum operating volume, high truck costs, and quality violations.
  */
-export const UNOPTIMIZED_BASELINES: Record<string, TelemetrySnapshot> = {
+export const UNOPTIMIZED_BASELINES: Record<FarmId, TelemetrySnapshot> = {
   'small-farm': {
     volumes: {
       rainwater: 2.5,
@@ -188,14 +211,12 @@ export const UNOPTIMIZED_BASELINES: Record<string, TelemetrySnapshot> = {
  * - 'salinity': Standard warm dry weather (24.0 °C, 60% RH, 0 mm rain).
  *
  * @param scenario - Identifier of the demonstration scenario.
- * @param _farm - Active Mediterranean farm profile.
  * @param baseDate - Target date for the weather timestamp (defaults to current time).
  * @returns WeatherData object for extreme scenarios, or null for 'live' mode.
  * @throws Never throws.
  */
 export function getScenarioWeather(
   scenario: DemoScenarioId,
-  _farm: FarmProfile,
   baseDate: Date = new Date()
 ): WeatherData | null {
   const timestamp = baseDate.toISOString();
@@ -248,14 +269,12 @@ export function getScenarioWeather(
  * - 'live': Reverts to baseline flows.
  *
  * @param scenario - Active demonstration scenario.
- * @param _farm - Mediterranean farm profile.
  * @param baseFlows - Baseline flow rates for the profile.
  * @returns Adjusted WaterFlowMetrics reflecting scenario conditions.
  * @throws Never throws.
  */
 export function getScenarioFlows(
   scenario: DemoScenarioId,
-  _farm: FarmProfile,
   baseFlows: WaterFlowMetrics
 ): WaterFlowMetrics {
   switch (scenario) {
@@ -333,7 +352,7 @@ export function getScenarioVolumes(
  * @throws Never throws.
  */
 export function getUnoptimizedBaselineTelemetry(farm: FarmProfile): TelemetrySnapshot {
-  return UNOPTIMIZED_BASELINES[farm.id] ?? UNOPTIMIZED_BASELINES['small-farm'];
+  return UNOPTIMIZED_BASELINES[farm.id];
 }
 
 /**
@@ -348,7 +367,7 @@ export function getUnoptimizedBaselineTelemetry(farm: FarmProfile): TelemetrySna
  * @throws Never throws.
  */
 export function getOptimizedTelemetry(farm: FarmProfile): TelemetrySnapshot {
-  return OPTIMAL_FARM_PARAMETERS[farm.id] ?? OPTIMAL_FARM_PARAMETERS['small-farm'];
+  return OPTIMAL_FARM_PARAMETERS[farm.id];
 }
 
 /**
@@ -585,8 +604,8 @@ export function advanceSimulation(
     };
   } else {
     // In simulated scenarios, get scenario-specific weather and flows
-    effectiveWeather = getScenarioWeather(scenario, farm, newDate);
-    const scenarioFlows = getScenarioFlows(scenario, farm, baseline.flows);
+    effectiveWeather = getScenarioWeather(scenario, newDate);
+    const scenarioFlows = getScenarioFlows(scenario, baseline.flows);
     // If advancing a full 24h day, preserve full scenario demand;
     // if advancing 6h, modulate irrigation demand with diurnal factor
     const diurnalDemands = hours >= 24

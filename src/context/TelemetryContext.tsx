@@ -138,6 +138,101 @@ const TelemetryContext = createContext<TelemetryContextType | undefined>(undefin
 const STORAGE_KEY_PREFIX = 'water4all_telemetry_';
 
 /**
+ * Reads one telemetry slot from localStorage.
+ *
+ * @summary Read a telemetry slot.
+ * @description Returns the stored value, or the fallback when nothing is stored or the stored
+ * value cannot be parsed.
+ *
+ * @param farmId - Farm profile the slot belongs to.
+ * @param slot - Telemetry slot being read.
+ * @param fallback - Value to use when nothing usable is stored.
+ * @returns Parsed stored value, or the fallback.
+ * @throws Never throws.
+ */
+function readSlot<T>(farmId: FarmId, slot: TelemetrySlot, fallback: T): T {
+  return loadPersisted(storageKey(farmId, slot), fallback);
+}
+
+/**
+ * Independently persisted slots of a farm's telemetry state.
+ *
+ * @remarks Declared as a list rather than a union so that operations covering the whole of a
+ * farm's persisted state, such as resetToBaseline, iterate it instead of enumerating slots by
+ * hand and drifting the day a slot is added.
+ */
+const TELEMETRY_SLOTS = [
+  'volumes',
+  'flows',
+  'irrigationMode',
+  'scheduledIrrigation',
+  'truckCost',
+] as const;
+
+type TelemetrySlot = (typeof TELEMETRY_SLOTS)[number];
+
+/**
+ * Builds the localStorage key holding one slot of one farm's telemetry.
+ *
+ * @summary Telemetry storage key.
+ * @description Composes the shared prefix, the farm identifier, and the slot name.
+ *
+ * @remarks Every read, write and removal goes through this, so the key scheme lives in one
+ * place and renaming a slot cannot leave a stale key behind at some other call site.
+ *
+ * @param farmId - Farm profile the slot belongs to.
+ * @param slot - Telemetry slot being addressed.
+ * @returns Fully qualified localStorage key.
+ * @throws Never throws.
+ */
+function storageKey(farmId: FarmId, slot: TelemetrySlot): string {
+  return `${STORAGE_KEY_PREFIX}${farmId}_${slot}`;
+}
+
+/**
+ * Writes one telemetry slot to localStorage.
+ *
+ * @summary Persist a telemetry slot.
+ * @description Serializes the value and stores it under the slot's key.
+ *
+ * @remarks Storage is unavailable in private browsing and can throw when the quota is
+ * exhausted. Persistence is a convenience here, never a correctness requirement, so a failure
+ * is warned about and swallowed rather than propagated into the render path.
+ *
+ * @param farmId - Farm profile the slot belongs to.
+ * @param slot - Telemetry slot being written.
+ * @param value - Value to serialize.
+ * @returns void
+ * @throws Never throws.
+ */
+function persistSlot(farmId: FarmId, slot: TelemetrySlot, value: unknown): void {
+  try {
+    localStorage.setItem(storageKey(farmId, slot), JSON.stringify(value));
+  } catch (error) {
+    console.warn(`Failed to persist ${slot} to localStorage:`, error);
+  }
+}
+
+/**
+ * Removes one telemetry slot from localStorage.
+ *
+ * @summary Clear a telemetry slot.
+ * @description Deletes the stored value, leaving the next read to fall back to the baseline.
+ *
+ * @param farmId - Farm profile the slot belongs to.
+ * @param slot - Telemetry slot being cleared.
+ * @returns void
+ * @throws Never throws.
+ */
+function clearSlot(farmId: FarmId, slot: TelemetrySlot): void {
+  try {
+    localStorage.removeItem(storageKey(farmId, slot));
+  } catch (error) {
+    console.warn(`Failed to remove ${slot} from localStorage:`, error);
+  }
+}
+
+/**
  * Safely loads and parses persisted JSON data from localStorage.
  *
  * @summary Load persisted state.
@@ -186,7 +281,7 @@ function rehydrateFlows(
   scheduledDemand: number
 ): WaterFlowMetrics {
   const baseline = getFarmBaseline(farmId);
-  const savedFlows = loadPersisted(`${STORAGE_KEY_PREFIX}${farmId}_flows`, { ...baseline.flows });
+  const savedFlows = readSlot(farmId, 'flows', { ...baseline.flows });
 
   return {
     ...savedFlows,
@@ -207,7 +302,7 @@ function rehydrateFlows(
  */
 function loadScheduledDemand(farmId: FarmId): number {
   return loadPersisted<number>(
-    `${STORAGE_KEY_PREFIX}${farmId}_scheduledIrrigation`,
+    storageKey(farmId, 'scheduledIrrigation'),
     getFarmBaseline(farmId).flows.irrigationDemand
   );
 }
@@ -238,7 +333,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const [volumes, setVolumes] = useState<TankVolumeMetrics | null>(() => {
     if (activeFarm) {
       const baseline = getFarmBaseline(activeFarm.id);
-      return loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`, { ...baseline.volumes });
+      return readSlot(activeFarm.id, 'volumes', { ...baseline.volumes });
     }
     return null;
   });
@@ -246,7 +341,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const [flows, setFlowsState] = useState<WaterFlowMetrics | null>(() => {
     if (activeFarm) {
       const savedMode = loadPersisted<IrrigationMode>(
-        `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+        storageKey(activeFarm.id, 'irrigationMode'),
         'auto'
       );
       return rehydrateFlows(activeFarm.id, savedMode, loadScheduledDemand(activeFarm.id));
@@ -258,7 +353,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const [irrigationMode, setIrrigationModeState] = useState<IrrigationMode>(() => {
     if (activeFarm) {
       return loadPersisted<IrrigationMode>(
-        `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+        storageKey(activeFarm.id, 'irrigationMode'),
         'auto'
       );
     }
@@ -277,7 +372,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const [cumulativeTruckCost, setCumulativeTruckCost] = useState<number>(() => {
     if (activeFarm) {
       return loadPersisted<number>(
-        `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
+        storageKey(activeFarm.id, 'truckCost'),
         0
       );
     }
@@ -289,19 +384,19 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
     if (activeFarm) {
       const baseline = getFarmBaseline(activeFarm.id);
       const savedMode = loadPersisted<IrrigationMode>(
-        `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
+        storageKey(activeFarm.id, 'irrigationMode'),
         'auto'
       );
 
       const savedSchedule = loadScheduledDemand(activeFarm.id);
 
-      setVolumes(loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`, { ...baseline.volumes }));
+      setVolumes(readSlot(activeFarm.id, 'volumes', { ...baseline.volumes }));
       setFlowsState(rehydrateFlows(activeFarm.id, savedMode, savedSchedule));
       setIrrigationModeState(savedMode);
       setScheduledIrrigationDemand(savedSchedule);
       setCumulativeTruckCost(
         loadPersisted<number>(
-          `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
+          storageKey(activeFarm.id, 'truckCost'),
           0
         )
       );
@@ -334,11 +429,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       }
       const next = typeof updater === 'function' ? updater(prev) : updater;
       if (activeFarm) {
-        try {
-          localStorage.setItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`, JSON.stringify(next));
-        } catch (e) {
-          console.warn('Failed to persist volumes to localStorage:', e);
-        }
+        persistSlot(activeFarm.id, 'volumes', next);
       }
       return next;
     });
@@ -364,11 +455,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       }
       const next = typeof updater === 'function' ? updater(prev) : updater;
       if (activeFarm) {
-        try {
-          localStorage.setItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, JSON.stringify(next));
-        } catch (e) {
-          console.warn('Failed to persist flows to localStorage:', e);
-        }
+        persistSlot(activeFarm.id, 'flows', next);
       }
       return next;
     });
@@ -388,14 +475,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const setIrrigationMode = (mode: IrrigationMode): void => {
     setIrrigationModeState(mode);
     if (activeFarm) {
-      try {
-        localStorage.setItem(
-          `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
-          JSON.stringify(mode)
-        );
-      } catch (e) {
-        console.warn('Failed to persist irrigationMode to localStorage:', e);
-      }
+      persistSlot(activeFarm.id, 'irrigationMode', mode);
 
       setFlows((prev) => ({
         ...prev,
@@ -440,14 +520,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
     // Accumulate delivery expense
     setCumulativeTruckCost((prev) => {
       const updatedCost = prev + deliveryResult.addedCostEur;
-      try {
-        localStorage.setItem(
-          `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
-          JSON.stringify(updatedCost)
-        );
-      } catch (e) {
-        console.warn('Failed to persist truckCost to localStorage:', e);
-      }
+      persistSlot(activeFarm.id, 'truckCost', updatedCost);
       return updatedCost;
     });
 
@@ -512,15 +585,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       setIrrigationModeState('auto');
       setScheduledIrrigationDemand(baseline.flows.irrigationDemand);
       setCumulativeTruckCost(0);
-      try {
-        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`);
-        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`);
-        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`);
-        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_scheduledIrrigation`);
-        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`);
-      } catch (e) {
-        console.warn('Failed to remove telemetry from localStorage:', e);
-      }
+      TELEMETRY_SLOTS.forEach((slot) => clearSlot(activeFarm.id, slot));
     }
   };
 
@@ -565,37 +630,18 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
     }
 
     if (activeFarm) {
-      try {
-        localStorage.setItem(
-          `${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`,
-          JSON.stringify(snapshot.volumes)
-        );
-        if (appliedFlows) {
-          localStorage.setItem(
-            `${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`,
-            JSON.stringify(appliedFlows)
-          );
-        }
-        if (snapshot.scheduledIrrigationDemand !== undefined) {
-          localStorage.setItem(
-            `${STORAGE_KEY_PREFIX}${activeFarm.id}_scheduledIrrigation`,
-            JSON.stringify(snapshot.scheduledIrrigationDemand)
-          );
-        }
-        if (snapshot.cumulativeTruckCost !== undefined) {
-          localStorage.setItem(
-            `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
-            JSON.stringify(snapshot.cumulativeTruckCost)
-          );
-        }
-        if (snapshot.irrigationMode) {
-          localStorage.setItem(
-            `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
-            JSON.stringify(snapshot.irrigationMode)
-          );
-        }
-      } catch (e) {
-        console.warn('Failed to persist snapshot to localStorage:', e);
+      persistSlot(activeFarm.id, 'volumes', snapshot.volumes);
+      if (appliedFlows) {
+        persistSlot(activeFarm.id, 'flows', appliedFlows);
+      }
+      if (snapshot.scheduledIrrigationDemand !== undefined) {
+        persistSlot(activeFarm.id, 'scheduledIrrigation', snapshot.scheduledIrrigationDemand);
+      }
+      if (snapshot.cumulativeTruckCost !== undefined) {
+        persistSlot(activeFarm.id, 'truckCost', snapshot.cumulativeTruckCost);
+      }
+      if (snapshot.irrigationMode) {
+        persistSlot(activeFarm.id, 'irrigationMode', snapshot.irrigationMode);
       }
     }
   };

@@ -19,6 +19,7 @@ import { IrrigationModeSelector } from '../supervisory/IrrigationModeSelector';
 import { WaterTruckModal } from '../supervisory/WaterTruckModal';
 import { PumpTransferModal } from '../supervisory/PumpTransferModal';
 import { CloudRain, Wind, Truck, Cylinder, Layers, AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import { TransferSourceTank } from '../../types/telemetry';
 
 /**
  * Dedicated Tanks & Sources screen component.
@@ -38,7 +39,7 @@ export function TanksView(): React.JSX.Element {
   // Supervisory control modal states
   const [isTruckModalOpen, setIsTruckModalOpen] = useState(false);
   const [isPumpModalOpen, setIsPumpModalOpen] = useState(false);
-  const [pumpSource, setPumpSource] = useState<'rainwater' | 'esa'>('rainwater');
+  const [pumpSource, setPumpSource] = useState<TransferSourceTank>('rainwater');
 
   // If no farm is active or telemetry is loading, display loading placeholder
   if (!activeFarm || !telemetry) {

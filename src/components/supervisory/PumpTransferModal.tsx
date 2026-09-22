@@ -14,6 +14,7 @@ import { ArrowRightLeft, CloudRain, Wind, Cylinder, AlertCircle, CheckCircle2, X
 import { TransferSourceTank } from '../../types/telemetry';
 import {
   validateAndExecutePumpTransfer,
+  SOURCE_TANK_NAMES,
   MIN_MANUAL_TRANSFER_VOLUME_M3,
   MAX_MANUAL_TRANSFER_VOLUME_M3,
 } from '../../domain/supervisoryEngine';
@@ -62,7 +63,6 @@ export function PumpTransferModal({
     return null;
   }
 
-  const sourceVolume = telemetry.tankVolumes[fromTank];
   const blendVolume = telemetry.tankVolumes.blend;
   const blendCapacity = activeFarm.tankCapacities.blend;
   const blendHeadroom = Math.max(0, blendCapacity - blendVolume);
@@ -80,10 +80,6 @@ export function PumpTransferModal({
   const isOutOfBand =
     volumeM3 < MIN_MANUAL_TRANSFER_VOLUME_M3 || volumeM3 > MAX_MANUAL_TRANSFER_VOLUME_M3;
 
-  // Retained only to phrase the operator-facing messages, which name the tank the engine
-  // error does not. The engine remains the sole authority on whether a transfer may run.
-  const isSourceInsufficient = volumeM3 > sourceVolume;
-  const isBlendOverflow = volumeM3 > blendHeadroom;
   const isValid = transferPreview.success && !isOutOfBand;
 
   /**
@@ -121,7 +117,7 @@ export function PumpTransferModal({
     onClose();
   };
 
-  const sourceName = fromTank === 'rainwater' ? 'Rainwater tank' : 'ESA tank';
+  const sourceName = SOURCE_TANK_NAMES[fromTank];
 
   return (
     <div
@@ -163,7 +159,7 @@ export function PumpTransferModal({
               <h3 className="text-base font-bold text-white">Transfer Completed!</h3>
               <p className="mt-1 text-xs text-slate-300">
                 Successfully transferred <strong>{transferSuccess.transferredM3.toFixed(1)} m³</strong> from{' '}
-                {transferSuccess.fromTank === 'rainwater' ? 'Rainwater tank' : 'ESA tank'} into Blend tank.
+                {SOURCE_TANK_NAMES[transferSuccess.fromTank]} into Blend tank.
               </p>
               <p className="mt-1 text-xs font-semibold text-emerald-400">
                 Mass balance conserved (Total farm stored water unchanged).
@@ -285,15 +281,6 @@ export function PumpTransferModal({
             </div>
 
             {/* Validation & Error Display */}
-            {isSourceInsufficient && !isOutOfBand && (
-              <div className="flex items-start space-x-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <p className="leading-tight">
-                  Insufficient water in {sourceName}. Available: {sourceVolume.toFixed(1)} m³.
-                </p>
-              </div>
-            )}
-
             {isOutOfBand && volumeM3 > 0 && (
               <div className="flex items-start space-x-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -304,12 +291,10 @@ export function PumpTransferModal({
               </div>
             )}
 
-            {isBlendOverflow && !isOutOfBand && (
+            {!transferPreview.success && !isOutOfBand && volumeM3 > 0 && (
               <div className="flex items-start space-x-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <p className="leading-tight">
-                  Transfer would exceed Blend tank capacity. Headroom: {blendHeadroom.toFixed(1)} m³.
-                </p>
+                <p className="leading-tight">{transferPreview.errorMessage}</p>
               </div>
             )}
 

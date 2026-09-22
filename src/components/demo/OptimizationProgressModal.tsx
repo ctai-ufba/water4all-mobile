@@ -8,21 +8,7 @@
 import React from 'react';
 import { Sparkles, CheckCircle2, Loader2, Check } from 'lucide-react';
 import { useDemo } from '../../context/DemoContext';
-
-/**
- * Phased checklist items displayed in the optimization modal.
- */
-interface PhaseCheckItem {
-  threshold: number;
-  label: string;
-}
-
-const CHECK_ITEMS: PhaseCheckItem[] = [
-  { threshold: 15, label: 'Weather & Solar Irradiance Analysis' },
-  { threshold: 50, label: 'Crop ET₀ Demand & Deficit Calibration' },
-  { threshold: 80, label: 'Blend Tank Mass Balance Tuning' },
-  { threshold: 100, label: 'Optimal Design Applied (ADR 0002)' },
-];
+import { OPTIMIZATION_PHASES } from '../../domain/demoEngine';
 
 /**
  * 2-second animated optimization progress modal component.
@@ -101,15 +87,15 @@ export function OptimizationProgressModal(): React.JSX.Element | null {
 
         {/* Phased Checklist */}
         <div className="mt-4 space-y-2 border-t border-slate-800/80 pt-3 text-xs">
-          {CHECK_ITEMS.map((item, index) => {
-            const isCompleted = optimizationProgress >= item.threshold;
+          {OPTIMIZATION_PHASES.map((item, index) => {
+            const isCompleted = optimizationProgress >= item.progress;
             const isCurrent =
-              optimizationProgress < item.threshold &&
-              (index === 0 || optimizationProgress >= CHECK_ITEMS[index - 1].threshold);
+              optimizationProgress < item.progress &&
+              (index === 0 || optimizationProgress >= OPTIMIZATION_PHASES[index - 1].progress);
 
             return (
               <div
-                key={item.label}
+                key={item.checklistLabel}
                 className={`flex items-center space-x-2.5 transition-colors ${
                   isCompleted
                     ? 'text-emerald-300'
@@ -129,7 +115,7 @@ export function OptimizationProgressModal(): React.JSX.Element | null {
                 >
                   {isCompleted ? <Check className="h-3 w-3" /> : index + 1}
                 </div>
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{item.checklistLabel}</span>
               </div>
             );
           })}

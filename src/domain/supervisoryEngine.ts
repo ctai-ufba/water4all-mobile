@@ -8,6 +8,7 @@
 
 import {
   IrrigationMode,
+  TransferSourceTank,
   PumpTransferParams,
   PumpTransferResult,
   WaterTruckDeliveryResult,
@@ -111,6 +112,17 @@ export function calculateIrrigationDemand(
 }
 
 /**
+ * Operator-facing names of the tanks a manual transfer can draw from.
+ *
+ * @remarks Kept beside the transfer rules so a rejection message can name the tank the operator
+ * picked, instead of each caller rebuilding the rules to phrase its own message.
+ */
+export const SOURCE_TANK_NAMES: Record<TransferSourceTank, string> = {
+  rainwater: 'Rainwater tank',
+  esa: 'ESA tank',
+};
+
+/**
  * Validates and executes a manual pump transfer from Rainwater or ESA tank into the Blend tank.
  *
  * @summary Validate and execute pump transfer.
@@ -147,7 +159,7 @@ export function validateAndExecutePumpTransfer(
       success: false,
       transferredM3: 0,
       updatedVolumes: currentVolumes,
-      errorMessage: `Insufficient volume in source tank. Available: ${sourceAvailable.toFixed(1)} m³, Requested: ${volumeM3.toFixed(1)} m³.`,
+      errorMessage: `Insufficient water in ${SOURCE_TANK_NAMES[fromTank]}. Available: ${sourceAvailable.toFixed(1)} m³, Requested: ${volumeM3.toFixed(1)} m³.`,
     };
   }
 
@@ -158,7 +170,7 @@ export function validateAndExecutePumpTransfer(
       success: false,
       transferredM3: 0,
       updatedVolumes: currentVolumes,
-      errorMessage: `Transfer would exceed Blend tank capacity. Available headroom: ${blendAvailableHeadroom.toFixed(1)} m³, Requested: ${volumeM3.toFixed(1)} m³.`,
+      errorMessage: `Transfer would exceed Blend tank capacity. Headroom: ${blendAvailableHeadroom.toFixed(1)} m³, Requested: ${volumeM3.toFixed(1)} m³.`,
     };
   }
 

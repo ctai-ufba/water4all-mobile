@@ -12,6 +12,7 @@ import {
   validateAndExecutePumpTransfer,
 } from '../supervisoryEngine';
 import { TankVolumeMetrics } from '../../types/telemetry';
+import { FARM_PROFILES } from '../../types/farm';
 
 describe('supervisoryEngine', () => {
   describe('calculateTruckDelivery', () => {
@@ -79,12 +80,8 @@ describe('supervisoryEngine', () => {
       blend: 25.0,
     };
 
-    const capacities = {
-      rainwater: 45.0,
-      esa: 12.0,
-      external: 20.0,
-      blend: 35.0,
-    };
+    // Small Farm profile: 45.0 / 12.0 / 20.0 / 35.0 m³
+    const capacities = FARM_PROFILES['small-farm'].tankCapacities;
 
     it('successfully transfers water from Rainwater to Blend tank with mass balance', () => {
       const result = validateAndExecutePumpTransfer({
@@ -151,7 +148,7 @@ describe('supervisoryEngine', () => {
 
       expect(result.success).toBe(false);
       expect(result.transferredM3).toBe(0);
-      expect(result.errorMessage).toContain('Insufficient volume in source tank');
+      expect(result.errorMessage).toContain('Insufficient water in ESA tank');
       expect(result.updatedVolumes).toEqual(initialVolumes);
     });
 

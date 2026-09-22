@@ -28,12 +28,12 @@ describe('Demo Engine Domain Logic', () => {
 
   describe('Scenario Weather Generation', () => {
     it('returns null for "live" scenario to preserve real/synthetic weather', () => {
-      const weather = getScenarioWeather('live', smallFarm);
+      const weather = getScenarioWeather('live');
       expect(weather).toBeNull();
     });
 
     it('generates extreme heat and dry air for "drought" scenario', () => {
-      const weather = getScenarioWeather('drought', smallFarm);
+      const weather = getScenarioWeather('drought');
       expect(weather).not.toBeNull();
       expect(weather?.temperatureC).toBe(38.5);
       expect(weather?.relativeHumidityPct).toBe(18);
@@ -43,7 +43,7 @@ describe('Demo Engine Domain Logic', () => {
     });
 
     it('generates heavy rain and saturated humidity for "storm" scenario', () => {
-      const weather = getScenarioWeather('storm', smallFarm);
+      const weather = getScenarioWeather('storm');
       expect(weather).not.toBeNull();
       expect(weather?.temperatureC).toBe(17.5);
       expect(weather?.relativeHumidityPct).toBe(95);
@@ -52,7 +52,7 @@ describe('Demo Engine Domain Logic', () => {
     });
 
     it('generates warm dry conditions for "salinity" scenario', () => {
-      const weather = getScenarioWeather('salinity', smallFarm);
+      const weather = getScenarioWeather('salinity');
       expect(weather).not.toBeNull();
       expect(weather?.temperatureC).toBe(24.0);
       expect(weather?.relativeHumidityPct).toBe(60);
@@ -61,28 +61,28 @@ describe('Demo Engine Domain Logic', () => {
 
   describe('Scenario Flow Adjustments', () => {
     it('increases irrigation demand and zeroes rainwater in drought', () => {
-      const flows = getScenarioFlows('drought', smallFarm, smallBaseline.flows);
+      const flows = getScenarioFlows('drought', smallBaseline.flows);
       expect(flows.rainwaterInflow).toBe(0.0);
       expect(flows.irrigationDemand).toBeGreaterThan(smallBaseline.flows.irrigationDemand);
       expect(flows.esaInflow).toBeLessThan(smallBaseline.flows.esaInflow);
     });
 
     it('surges rainwater catchment and decreases irrigation demand in storm', () => {
-      const flows = getScenarioFlows('storm', smallFarm, smallBaseline.flows);
+      const flows = getScenarioFlows('storm', smallBaseline.flows);
       expect(flows.rainwaterInflow).toBeGreaterThan(smallBaseline.flows.rainwaterInflow * 3);
       expect(flows.irrigationDemand).toBeLessThan(smallBaseline.flows.irrigationDemand);
       expect(flows.esaInflow).toBeGreaterThan(smallBaseline.flows.esaInflow);
     });
 
     it('elevates external supply inflow in salinity scenario', () => {
-      const flows = getScenarioFlows('salinity', smallFarm, smallBaseline.flows);
+      const flows = getScenarioFlows('salinity', smallBaseline.flows);
       expect(flows.externalInflow).toBeGreaterThanOrEqual(2.5);
       expect(flows.rainwaterInflow).toBe(0.2);
       expect(flows.esaInflow).toBe(0.2);
     });
 
     it('returns untouched baseline flows in live mode', () => {
-      const flows = getScenarioFlows('live', smallFarm, smallBaseline.flows);
+      const flows = getScenarioFlows('live', smallBaseline.flows);
       expect(flows).toEqual(smallBaseline.flows);
     });
   });

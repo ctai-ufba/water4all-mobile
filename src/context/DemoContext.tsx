@@ -28,6 +28,8 @@ import {
   getOptimizedTelemetry,
   advanceSimulation,
   OPTIMIZATION_PHASES,
+  OPTIMIZATION_APPLY_AT_MS,
+  OPTIMIZATION_DURATION_MS,
 } from '../domain/demoEngine';
 import { getFarmBaseline } from '../types/telemetry';
 
@@ -213,10 +215,10 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
       }
 
       // Generate scenario-specific weather and flows
-      const scenarioWeather = getScenarioWeather(targetScenario, activeFarm, simulatedDate);
+      const scenarioWeather = getScenarioWeather(targetScenario, simulatedDate);
       setCustomWeather(scenarioWeather);
 
-      const scenarioFlows = getScenarioFlows(targetScenario, activeFarm, baseline.flows);
+      const scenarioFlows = getScenarioFlows(targetScenario, baseline.flows);
       setFlows(scenarioFlows);
 
       // In salinity scenario, skew tank storage to external supply
@@ -331,7 +333,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     setOptimizationProgress(OPTIMIZATION_PHASES[0].progress);
     setOptimizationPhase(OPTIMIZATION_PHASES[0].label);
 
-    // Schedule phase transitions over 2000 ms
+    // Schedule phase transitions across the animation
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     OPTIMIZATION_PHASES.forEach((phase) => {
@@ -342,7 +344,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
       timers.push(timer);
     });
 
-    // At 1600 ms: apply pre-computed optimal parameters
+    // Apply the pre-computed optimal parameters as the progress bar reaches 100%
     const completionTimer = setTimeout(() => {
       const optimal = getOptimizedTelemetry(activeFarm);
       applySnapshot(optimal);
@@ -351,13 +353,13 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
       setScenario('live');
       setIsUnoptimizedBaseline(false);
       setCustomWeather(null);
-    }, 1600);
+    }, OPTIMIZATION_APPLY_AT_MS);
     timers.push(completionTimer);
 
-    // At 2000 ms: auto-dismiss modal exactly at 2 seconds
+    // Auto-dismiss the modal when the animation ends
     const dismissTimer = setTimeout(() => {
       setIsOptimizing(false);
-    }, 2000);
+    }, OPTIMIZATION_DURATION_MS);
     timers.push(dismissTimer);
 
     optimizationTimersRef.current = timers;
