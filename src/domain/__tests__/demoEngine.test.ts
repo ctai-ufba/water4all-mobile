@@ -17,11 +17,18 @@ import {
   calculateDiurnalDemand,
   advanceSimulation,
   AdvanceSimulationParams,
+  SOURCE_TANK_PUMP_RESERVE_RATIO,
   OPTIMIZATION_PHASES,
 } from '../demoEngine';
 import { calculateCatchmentInflow } from '../catchmentEngine';
+import { calculateBlendQuality } from '../waterQualityEngine';
+import { evaluateCropCompliance } from '../faoComplianceEngine';
 import { FARM_PROFILES } from '../../types/farm';
-import { BASELINE_TELEMETRY } from '../../types/telemetry';
+import {
+  BASELINE_TELEMETRY,
+  TankVolumeMetrics,
+  WaterFlowMetrics,
+} from '../../types/telemetry';
 
 describe('Demo Engine Domain Logic', () => {
   const smallFarm = FARM_PROFILES['small-farm'];
@@ -140,8 +147,8 @@ describe('Demo Engine Domain Logic', () => {
 
       // The naive schedule asks for more than the 2.1 m³/day the farm is calibrated for, and
       // Auto mode runs it in full.
-      expect(unopt.scheduledIrrigationDemand).toBe(2.8);
-      expect(unopt.flows?.irrigationDemand).toBe(2.8);
+      expect(unopt.scheduledIrrigationDemand).toBe(3.6);
+      expect(unopt.flows?.irrigationDemand).toBe(3.6);
 
       const opt = getOptimizedTelemetry(smallFarm);
       expect(opt.scheduledIrrigationDemand).toBe(2.1);
@@ -151,8 +158,8 @@ describe('Demo Engine Domain Logic', () => {
     it('carries the unoptimized schedule for Medium Farm too', () => {
       const unopt = getUnoptimizedBaselineTelemetry(mediumFarm);
 
-      expect(unopt.scheduledIrrigationDemand).toBe(7.2);
-      expect(unopt.flows?.irrigationDemand).toBe(7.2);
+      expect(unopt.scheduledIrrigationDemand).toBe(9.5);
+      expect(unopt.flows?.irrigationDemand).toBe(9.5);
     });
 
     it('provides depleted Blend tank below minimum operating volume for Medium Farm', () => {
@@ -214,12 +221,13 @@ describe('Demo Engine Domain Logic', () => {
     });
 
     it('drains Blend tank down to 0 without going negative under extreme demand', () => {
-      // Sources are empty, so replenishment cannot rescue the Blend tank and the floor at
-      // 0 m³ is the only thing standing between consumption and a negative volume.
+      // Every source is empty, external supply included, so replenishment cannot rescue the
+      // Blend tank and the floor at 0 m³ is the only thing standing between consumption and a
+      // negative volume.
       const initialVolumes = {
         rainwater: 0.0,
         esa: 0.0,
-        external: 5.0,
+        external: 0.0,
         blend: 1.0,
       };
 
@@ -246,13 +254,13 @@ describe('Demo Engine Domain Logic', () => {
     });
 
     it('will not pump a source tank below its reserve floor to top up the Blend tank', () => {
-      // Rainwater sits at 4.0 m³, under its 4.5 m³ floor (10% of 45 m³), and ESA at 1.0 m³,
-      // under its 1.2 m³ floor. Neither can give anything up, however far the Blend tank is
-      // from its target volume.
+      // Rainwater sits at 4.0 m³, under its 4.5 m³ floor (10% of 45 m³), ESA at 1.0 m³ under
+      // its 1.2 m³ floor, and external supply at 1.0 m³ under its 2.0 m³ floor. None can give
+      // anything up, however far the Blend tank is from its target volume.
       const depletedSources = {
         rainwater: 4.0,
         esa: 1.0,
-        external: 5.0,
+        external: 1.0,
         blend: 10.0,
       };
 
@@ -269,6 +277,7 @@ describe('Demo Engine Domain Logic', () => {
 
       expect(updated.rainwater).toBe(4.0);
       expect(updated.esa).toBe(1.0);
+      expect(updated.external).toBe(1.0);
       expect(updated.blend).toBe(10.0);
     });
 
@@ -412,10 +421,12 @@ describe('Demo Engine Domain Logic', () => {
     });
 
     it('decreases Blend tank volume during severe drought demand', () => {
+      // Every source low, purchased water included: a farm still holding external supply
+      // spends it before the Blend tank falls, which is a different scene from this one.
       const initialVolumes = {
-        rainwater: 2.0, // low sources
+        rainwater: 2.0,
         esa: 1.0,
-        external: 5.0,
+        external: 1.5,
         blend: 20.0,
       };
 
@@ -490,5 +501,194 @@ describe('Demo Engine Domain Logic', () => {
         smallBaseline.flows.irrigationDemand
       );
     });
+  });
+  describe('External Supply Replenishment', () => {
+    it('draws on external supply once rainwater and ESA are at their reserve floors', () => {
+      const capacities = smallFarm.tankCapacities;
+      const volumes = {
+        rainwater: capacities.rainwater * SOURCE_TANK_PUMP_RESERVE_RATIO,
+        esa: capacities.esa * SOURCE_TANK_PUMP_RESERVE_RATIO,
+        external: 15.0,
+        blend: 12.0,
+      };
+
+      const result = simulateTimeStep(6, volumes, smallBaseline.flows, capacities);
+
+      expect(result.external).toBeLessThan(volumes.external);
+      expect(result.blend).toBeGreaterThan(
+        volumes.blend -
+          (smallBaseline.flows.irrigationDemand +
+            smallBaseline.flows.humanUtilityDemand +
+            smallBaseline.flows.livestockDemand) /
+            4
+      );
+    });
+
+    it('spends local sources before touching purchased external water', () => {
+      const capacities = smallFarm.tankCapacities;
+      const volumes = { rainwater: 30.0, esa: 8.0, external: 15.0, blend: 12.0 };
+
+      const result = simulateTimeStep(6, volumes, smallBaseline.flows, capacities);
+
+      expect(result.rainwater).toBeLessThan(volumes.rainwater);
+      expect(result.external).toBe(volumes.external);
+    });
+
+    it('holds external supply at its reserve floor rather than emptying the tank', () => {
+      const capacities = smallFarm.tankCapacities;
+      const volumes = { rainwater: 0, esa: 0, external: 18.0, blend: 0 };
+      const thirstyFlows = {
+        ...smallBaseline.flows,
+        rainwaterInflow: 0,
+        esaInflow: 0,
+        externalInflow: 0,
+      };
+
+      const result = simulateTimeStep(24, volumes, thirstyFlows, capacities);
+
+      expect(result.external).toBeGreaterThanOrEqual(
+        capacities.external * SOURCE_TANK_PUMP_RESERVE_RATIO - 0.01
+      );
+    });
+
+    /**
+     * Runs the salinity scenario forward a whole number of days.
+     *
+     * @param days - Number of 24h steps to advance.
+     * @returns Reservoir volumes after the run.
+     */
+    function runSalinityDays(days: number): TankVolumeMetrics {
+      let volumes = getScenarioVolumes('salinity', smallFarm, smallBaseline.volumes);
+      let date = new Date('2026-09-21T06:00:00.000Z');
+
+      for (let day = 0; day < days; day += 1) {
+        const step = advanceSimulation(
+          advanceParams({
+            currentDate: date,
+            hours: 24,
+            currentVolumes: volumes,
+            scenario: 'salinity',
+          })
+        );
+        volumes = step.volumes;
+        date = step.date;
+      }
+
+      return volumes;
+    }
+
+    it('keeps the salinity scenario running on external supply instead of draining dry', () => {
+      // Long enough that consumption alone would empty a Blend tank nothing replenishes:
+      // 24.5 m³ of stored blend against 2.6 m³/day of demand runs out inside ten days.
+      const volumes = runSalinityDays(12);
+      expect(volumes.blend).toBeGreaterThan(smallFarm.tankCapacities.minOperatingVolume);
+    });
+
+    it('spends the external tank to hold the salinity Blend tank up', () => {
+      const initial = getScenarioVolumes('salinity', smallFarm, smallBaseline.volumes);
+      const volumes = runSalinityDays(12);
+
+      // The water sustaining the Blend tank came out of external supply, which is what makes
+      // the scenario a salinity scenario rather than a second drought.
+      expect(volumes.external).toBeLessThan(initial.external);
+    });
+  });
+  describe('Unoptimized Baseline as a Running State', () => {
+    /**
+     * Total daily inflow and consumption implied by a snapshot's flows.
+     *
+     * @param flows - Snapshot flow rates.
+     * @returns Daily inflow and consumption totals in m³/day.
+     */
+    function waterBudget(flows: WaterFlowMetrics): { inflow: number; consumption: number } {
+      return {
+        inflow: flows.rainwaterInflow + flows.esaInflow + flows.externalInflow,
+        consumption:
+          flows.irrigationDemand + flows.humanUtilityDemand + flows.livestockDemand,
+      };
+    }
+
+    for (const farm of [FARM_PROFILES['small-farm'], FARM_PROFILES['medium-farm']]) {
+      describe(farm.id, () => {
+        const unopt = getUnoptimizedBaselineTelemetry(farm);
+        const min = farm.tankCapacities.minOperatingVolume;
+
+        it('runs at a net water deficit rather than a hidden surplus', () => {
+          // A farm whose inflows outrun its consumption recovers on its own, whatever its
+          // starting volumes say. The deficit has to be what the operation produces.
+          const { inflow, consumption } = waterBudget(unopt.flows!);
+          expect(consumption).toBeGreaterThan(inflow);
+        });
+
+        it('cannot rescue its own Blend tank from stored source water', () => {
+          // Every source at or below its reserve floor: the farm has already spent what it
+          // bought, which is what the truck expense on the bill represents.
+          const reserve = SOURCE_TANK_PUMP_RESERVE_RATIO;
+          expect(unopt.volumes.rainwater).toBeLessThanOrEqual(
+            farm.tankCapacities.rainwater * reserve
+          );
+          expect(unopt.volumes.esa).toBeLessThanOrEqual(farm.tankCapacities.esa * reserve);
+          expect(unopt.volumes.external).toBeLessThanOrEqual(
+            farm.tankCapacities.external * reserve
+          );
+        });
+
+        it('deepens the Blend deficit on a 6 hour advance instead of erasing it', () => {
+          const step = advanceSimulation({
+            currentDate: new Date('2026-09-21T09:00:00.000Z'),
+            hours: 6,
+            currentVolumes: { ...unopt.volumes },
+            currentFlows: { ...unopt.flows! },
+            farm,
+            scenario: 'live',
+            irrigationMode: unopt.irrigationMode!,
+            scheduledIrrigationDemand: unopt.scheduledIrrigationDemand!,
+          });
+
+          expect(step.volumes.blend).toBeLessThan(unopt.volumes.blend);
+          expect(step.volumes.blend).toBeLessThan(min);
+        });
+
+        it('deepens the Blend deficit on a full day advance too', () => {
+          const step = advanceSimulation({
+            currentDate: new Date('2026-09-21T09:00:00.000Z'),
+            hours: 24,
+            currentVolumes: { ...unopt.volumes },
+            currentFlows: { ...unopt.flows! },
+            farm,
+            scenario: 'live',
+            irrigationMode: unopt.irrigationMode!,
+            scheduledIrrigationDemand: unopt.scheduledIrrigationDemand!,
+          });
+
+          expect(step.volumes.blend).toBeLessThan(unopt.volumes.blend);
+          expect(step.volumes.blend).toBeLessThan(min);
+        });
+
+        it('keeps stored water external-dominant, so the Blend runs saline', () => {
+          // calculateBlendQuality weights the Blend by stored source volumes, so the salinity
+          // trait survives only while external supply dominates that mix.
+          const { rainwater, esa, external } = unopt.volumes;
+          expect(external / (rainwater + esa + external)).toBeGreaterThan(0.7);
+
+          const unoptimizedQuality = calculateBlendQuality(unopt.volumes);
+          const calibratedQuality = calculateBlendQuality(BASELINE_TELEMETRY[farm.id].volumes);
+          expect(unoptimizedQuality.ec).toBeGreaterThan(calibratedQuality.ec * 2);
+
+          // Not asserted here: that this fails FAO crop compliance. It does not, and neither
+          // does the High Salinity scenario, because SOURCE_WATER_QUALITIES.external sits at
+          // EC 720 µS/cm, barely over the 700 threshold where FAO restrictions begin. Every
+          // mix the app can reach still evaluates 'safe'. Tracked as its own defect rather
+          // than papered over with a weaker threshold here.
+          expect(evaluateCropCompliance('vegetables', unoptimizedQuality).status).toBe('safe');
+        });
+
+        it('over-irrigates well beyond the profile calibration', () => {
+          expect(unopt.scheduledIrrigationDemand!).toBeGreaterThan(
+            BASELINE_TELEMETRY[farm.id].flows.irrigationDemand
+          );
+        });
+      });
+    }
   });
 });

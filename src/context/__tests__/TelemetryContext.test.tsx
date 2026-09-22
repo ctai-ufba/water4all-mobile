@@ -369,7 +369,7 @@ describe('TelemetryContext Seam', () => {
       screen.getByRole('button', { name: /Apply Unoptimized/i }).click();
     });
 
-    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('2.8');
+    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('3.6');
 
     // Remounting stands in for a page reload: the schedule must survive it rather than being
     // rewritten from the farm profile baseline.
@@ -382,7 +382,7 @@ describe('TelemetryContext Seam', () => {
     );
 
     expect(screen.getByTestId('irrigation-mode')).toHaveTextContent('auto');
-    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('2.8');
+    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('3.6');
 
     localStorage.clear();
   });

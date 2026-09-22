@@ -32,7 +32,7 @@ import {
   OPTIMIZATION_APPLY_AT_MS,
   OPTIMIZATION_DURATION_MS,
 } from '../domain/demoEngine';
-import { getFarmBaseline } from '../types/telemetry';
+import { getFarmBaseline, TankVolumeMetrics } from '../types/telemetry';
 
 /**
  * Interface defining the DemoContext shape and control methods.
@@ -119,6 +119,16 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
   // Ref tracking active timer IDs to safely clean up on unmount or cancellation
   const optimizationTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Reservoir volumes as they stood before the salinity scenario skewed them.
+  //
+  // The salinity scenario is the only one that overwrites stored volumes, and it has to: its
+  // premise is a Blend tank fed by external supply. Leaving it therefore has to put something
+  // back, and the profile calibration is the wrong thing — it erases every truck delivery, pump
+  // transfer and advanced hour behind it, while the truck expense those actions incurred stays on
+  // the bill. Holding the pre-scenario volumes makes salinity an overlay the presenter can step
+  // out of, rather than a reset of the farm.
+  const preSalinityVolumesRef = useRef<TankVolumeMetrics | null>(null);
+
   // Clear all pending optimization timers on unmount
   useEffect(() => {
     return () => {
@@ -145,6 +155,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     setOptimizationProgress(0);
     setOptimizationPhase('');
     setCustomWeather(null);
+    preSalinityVolumesRef.current = null;
   }, [setCustomWeather]);
 
   // Reset demo state whenever the active farm profile changes
@@ -188,6 +199,8 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    *
    * @remarks Scenario flows are derived from the farm's operating flows, so a switch changes the
    * weather without also reverting a paused or eco irrigation network the operator had set.
+   * Salinity's volume skew is likewise an overlay: leaving it restores the volumes held before it
+   * was entered, not the profile calibration. See {@link preSalinityVolumesRef}.
    *
    * @param targetScenario - Identifier of the scenario to activate.
    * @returns void
@@ -201,13 +214,14 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
 
       const baseline = getFarmBaseline(activeFarm.id);
 
-      // Clearing the baseline resets the farm to its calibrated schedule in auto mode, so the
-      // operating flows below have to be read after it, not before.
       if (isUnoptimizedBaseline) {
         setIsUnoptimizedBaseline(false);
         resetToBaseline();
       }
 
+      // resetToBaseline above puts the farm back on its calibrated schedule in auto mode, so a
+      // switch out of the baseline operates on the calibration rather than on the schedule and
+      // mode read from this render.
       const operatingFlows = isUnoptimizedBaseline
         ? { ...baseline.flows }
         : getOperatingFlows(
@@ -216,9 +230,17 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
             telemetry?.irrigationMode ?? 'auto'
           );
 
-      // If switching away from salinity, restore clean baseline tank volumes
+      const currentVolumes = telemetry?.tankVolumes ?? baseline.volumes;
+
+      if (targetScenario === 'salinity' && previousScenario !== 'salinity') {
+        // Remember what the skew is about to overwrite.
+        preSalinityVolumesRef.current = { ...currentVolumes };
+      }
+
       if (previousScenario === 'salinity' && targetScenario !== 'salinity') {
-        setTankVolumes({ ...baseline.volumes });
+        // Lift the skew, restoring the farm as the presenter left it.
+        setTankVolumes({ ...(preSalinityVolumesRef.current ?? baseline.volumes) });
+        preSalinityVolumesRef.current = null;
       }
 
       if (targetScenario === 'live') {
@@ -237,9 +259,8 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
 
       // In salinity scenario, skew tank storage to external supply
       if (targetScenario === 'salinity') {
-        const currentVols = isUnoptimizedBaseline ? baseline.volumes : (telemetry?.tankVolumes ?? baseline.volumes);
-        const scenarioVolumes = getScenarioVolumes(targetScenario, activeFarm, currentVols);
-        setTankVolumes(scenarioVolumes);
+        const skewFrom = isUnoptimizedBaseline ? baseline.volumes : currentVolumes;
+        setTankVolumes(getScenarioVolumes(targetScenario, activeFarm, skewFrom));
       }
     },
     [activeFarm, scenario, isUnoptimizedBaseline, simulatedDate, telemetry, scheduledIrrigationDemand, resetToBaseline, setCustomWeather, setFlows, setTankVolumes]

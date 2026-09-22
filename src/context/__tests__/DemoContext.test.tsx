@@ -411,4 +411,73 @@ describe('DemoContext', () => {
       );
     });
   });
+  describe('Leaving the salinity scenario', () => {
+    const workedVolumes = { rainwater: 31.0, esa: 9.4, external: 19.0, blend: 30.2 };
+
+    /**
+     * Mocks telemetry for a farm whose volumes reflect operator work, not the profile baseline.
+     *
+     * @returns void
+     */
+    function mockWorkedFarm(): void {
+      vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+        telemetry: {
+          ...mockTelemetry,
+          tankVolumes: { ...workedVolumes },
+          cumulativeTruckDeliveryCostEur: 112.5,
+        },
+        setTankVolumes: setTankVolumesMock,
+        setFlows: setFlowsMock,
+        setIrrigationMode: vi.fn(),
+        requestWaterTruck: vi.fn(),
+        executePumpTransfer: vi.fn(),
+        resetToBaseline: resetToBaselineMock,
+        applySnapshot: applySnapshotMock,
+        scheduledIrrigationDemand: mockBaseline.flows.irrigationDemand,
+      });
+    }
+
+    it('restores the volumes the farm had before salinity, not the profile calibration', () => {
+      mockWorkedFarm();
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Select Salinity').click();
+      });
+      setTankVolumesMock.mockClear();
+
+      act(() => {
+        screen.getByText('Select Live').click();
+      });
+
+      // The truck delivery and pump transfer that produced these volumes were paid for; resetting
+      // to the profile baseline would bill the presenter for water it then took away.
+      expect(setTankVolumesMock).toHaveBeenCalledWith(workedVolumes);
+      expect(setTankVolumesMock).not.toHaveBeenCalledWith(mockBaseline.volumes);
+    });
+
+    it('does not reset volumes when switching between two salinity selections', () => {
+      mockWorkedFarm();
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Select Salinity').click();
+      });
+      setTankVolumesMock.mockClear();
+
+      act(() => {
+        screen.getByText('Select Salinity').click();
+      });
+
+      expect(setTankVolumesMock).not.toHaveBeenCalledWith(workedVolumes);
+    });
+  });
 });

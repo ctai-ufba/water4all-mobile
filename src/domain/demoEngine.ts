@@ -110,9 +110,13 @@ const MEDIUM_FARM_CALIBRATED_SCHEDULE = getFarmBaseline('medium-farm').flows.irr
  * schedule is the defining trait of the unoptimized baseline, and it is what the optimization
  * demo removes. Expressed as a schedule rather than an effective demand so it survives a reload:
  * TelemetryProvider re-derives the effective demand from schedule and mode on every load.
+ *
+ * Set high enough that total consumption exceeds total inflow. A baseline that quietly runs a
+ * water surplus repairs its own deficit on the first time step, whatever its starting volumes
+ * claim, and the contrast the demo is built on disappears with one click.
  */
-const SMALL_FARM_UNOPTIMIZED_SCHEDULE = 2.8;
-const MEDIUM_FARM_UNOPTIMIZED_SCHEDULE = 7.2;
+const SMALL_FARM_UNOPTIMIZED_SCHEDULE = 3.6;
+const MEDIUM_FARM_UNOPTIMIZED_SCHEDULE = 9.5;
 
 /**
  * Pre-computed optimal parameters adhering to ADR 0002 for Mediterranean farm profiles.
@@ -161,19 +165,28 @@ export const OPTIMAL_FARM_PARAMETERS: Record<FarmId, TelemetrySnapshot> = {
 /**
  * Pre-calibrated unoptimized baseline parameters for Mediterranean farm profiles.
  * Exhibits depleted tanks below minimum operating volume, high truck costs, and quality violations.
+ *
+ * @remarks A running state, not a tableau: advancing time from here has to make matters worse, so
+ * the numbers must be self-consistent under the simulation rather than merely look bad at rest.
+ * Two constraints hold them together. Consumption exceeds inflow, so the deficit is what the
+ * operation produces rather than a starting volume the first time step undoes. And every source
+ * tank sits at or below its pump reserve floor, so the farm cannot rescue its own Blend tank —
+ * the truck expense on the bill is the water it has already spent doing exactly that. What remains
+ * stored stays external-dominant, which is what keeps crop compliance failing, since
+ * calculateBlendQuality weights the Blend by stored source volumes.
  */
 export const UNOPTIMIZED_BASELINES: Record<FarmId, TelemetrySnapshot> = {
   'small-farm': {
     volumes: {
-      rainwater: 2.5,
-      esa: 0.8,
-      external: 18.0, // Heavily reliant on external supply
+      rainwater: 0.3, // Poor catchment upkeep, below the 4.5 m³ pump reserve floor
+      esa: 0.2,       // Badly run ESA unit, below its 1.2 m³ floor
+      external: 2.0,  // Purchased water already spent, down to its 2.0 m³ floor
       blend: 5.5,     // Breaches min operating volume (7.0 m³) -> 1.5 m³ deficit!
     },
     flows: {
       rainwaterInflow: 0.5,
       esaInflow: 0.6,
-      externalInflow: 3.0,
+      externalInflow: 1.2,
       irrigationDemand: calculateIrrigationDemand(SMALL_FARM_UNOPTIMIZED_SCHEDULE, 'auto'),
       humanUtilityDemand: 0.5,
       livestockDemand: 0.0,
@@ -184,15 +197,15 @@ export const UNOPTIMIZED_BASELINES: Record<FarmId, TelemetrySnapshot> = {
   },
   'medium-farm': {
     volumes: {
-      rainwater: 8.0,
-      esa: 2.5,
-      external: 55.0, // Heavily reliant on external supply
+      rainwater: 1.2, // Poor catchment upkeep, below the 12.0 m³ pump reserve floor
+      esa: 0.8,       // Badly run ESA unit, below its 3.0 m³ floor
+      external: 6.0,  // Purchased water already spent, down to its 6.0 m³ floor
       blend: 12.0,    // Breaches min operating volume (16.0 m³) -> 4.0 m³ deficit!
     },
     flows: {
       rainwaterInflow: 1.0,
       esaInflow: 1.2,
-      externalInflow: 6.5,
+      externalInflow: 2.5,
       irrigationDemand: calculateIrrigationDemand(MEDIUM_FARM_UNOPTIMIZED_SCHEDULE, 'auto'),
       humanUtilityDemand: 0.8,
       livestockDemand: 1.4,
@@ -450,10 +463,12 @@ export function getOptimizedTelemetry(farm: FarmProfile): TelemetrySnapshot {
 /**
  * Fraction of a source tank's capacity withheld from supervisory replenishment.
  *
- * @remarks Without a floor, replenishment empties the Rainwater and ESA tanks to hold the Blend
- * tank at its target volume, so a severe drought would show the Blend tank *rising* while the
- * sources it drains run dry. Holding back a slice of each source keeps depleted sources from
- * propping up the Blend tank, which is what makes the drought scenario read as a drought.
+ * @remarks Without a floor, replenishment empties the source tanks to hold the Blend tank at its
+ * target volume, so a severe drought would show the Blend tank *rising* while the sources it
+ * drains run dry. Holding back a slice of each source keeps depleted sources from propping up the
+ * Blend tank, which is what makes the drought scenario read as a drought. The floor applies to
+ * external supply as well: a farm that has burned through its purchased water is in the same
+ * position as one whose catchment has run out, and should read that way on screen.
  */
 export const SOURCE_TANK_PUMP_RESERVE_RATIO = 0.1;
 
@@ -518,7 +533,7 @@ export function simulateTimeStep(
   // 3. New source tank volumes capped at physical capacities
   let newRain = Math.min(capacities.rainwater, currentVolumes.rainwater + rainInflow);
   let newEsa = Math.min(capacities.esa, currentVolumes.esa + esaInflow);
-  const newExternal = Math.min(capacities.external, currentVolumes.external + externalInflow);
+  let newExternal = Math.min(capacities.external, currentVolumes.external + externalInflow);
 
   // 4. Blend tank: subtract consumption drawn by farm operations (minimum 0 m³)
   const remainingBlend = Math.max(0, currentVolumes.blend - totalConsumption);
@@ -533,18 +548,28 @@ export function simulateTimeStep(
   // 80% per 24h). The caller states whether the event is heavy rather than this function
   // inferring it from an inflow threshold, which only ever held for the larger farm profile.
   const transferFactor = isHeavyCatchmentEvent ? 1.0 : (hours >= 24 ? 0.8 : 0.5);
-  const transferRequested = replenishmentNeeded * transferFactor;
+  let outstandingNeed = replenishmentNeeded * transferFactor;
 
-  // Prioritize sustainable Rainwater first, down to its reserve floor
-  const rainTransfer = Math.min(transferRequested, pumpableVolume(newRain, capacities.rainwater));
+  // Draw the sources in the order the farm prefers them: free and sustainable first, purchased
+  // last. Each gives up only what sits above its reserve floor.
+  const rainTransfer = Math.min(outstandingNeed, pumpableVolume(newRain, capacities.rainwater));
   newRain -= rainTransfer;
+  outstandingNeed -= rainTransfer;
 
-  // Supply remainder from ESA atmospheric water generator, down to its reserve floor
-  const remainingNeeded = transferRequested - rainTransfer;
-  const esaTransfer = Math.min(remainingNeeded, pumpableVolume(newEsa, capacities.esa));
+  const esaTransfer = Math.min(outstandingNeed, pumpableVolume(newEsa, capacities.esa));
   newEsa -= esaTransfer;
+  outstandingNeed -= esaTransfer;
 
-  const newBlend = Math.min(capacities.blend, remainingBlend + rainTransfer + esaTransfer);
+  const externalTransfer = Math.min(
+    outstandingNeed,
+    pumpableVolume(newExternal, capacities.external)
+  );
+  newExternal -= externalTransfer;
+
+  const newBlend = Math.min(
+    capacities.blend,
+    remainingBlend + rainTransfer + esaTransfer + externalTransfer
+  );
 
   return {
     rainwater: roundTo2Decimals(newRain),
