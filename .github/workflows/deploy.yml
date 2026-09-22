@@ -1,0 +1,69 @@
+# Builds the PWA and publishes it to GitHub Pages on every push to main.
+#
+# Nothing here configures the deployment path. Vite is set to `base: './'`, so the build emits
+# relative URLs and the same artifact works at the site root under `npm run preview` and under
+# `/water4all-mobile/` on Pages. The service worker and the Web App Manifest follow the same rule,
+# which is what keeps the installed app and its offline cache working on a project sub-path
+# (ADR 0001, ADR 0006).
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Lets a deployment be re-run from the Actions tab without an empty commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. In-flight runs are not cancelled: cancelling half way through leaves
+# Pages serving whichever version happened to be uploaded last.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The suite gates publication because this workflow deploys straight to the URL the demo is
+      # shown from: there is no staging step between a red test and an evaluator's phone.
+      - name: Run tests
+        run: npm run test:ci
+
+      # `npm run build` is `tsc -b && vite build`, so a type error fails the deployment here.
+      - name: Build
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

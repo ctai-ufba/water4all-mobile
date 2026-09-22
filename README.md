@@ -53,3 +53,29 @@ npm run icons   # rewrites icon-192.png, icon-512.png and icon-maskable-512.png
 
 `src/__tests__/pwaAssets.test.ts` then checks the manifest against the files on disk, so a missing
 or mis-sized icon fails the suite rather than silently disabling installation.
+
+## Deploying
+
+Pushing to `main` builds and publishes the app to
+<https://ctai-ufba.github.io/water4all-mobile/> through
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml), which runs the test suite, builds,
+and uploads `dist/` as the Pages artifact. A red test or a type error fails the run and leaves the
+live site on the previous version.
+
+The workflow needs one setting made by hand, once: **Settings -> Pages -> Build and deployment ->
+Source: GitHub Actions**. Nothing else is configured, because the build emits relative URLs and
+works at any path; the workflow header says why.
+
+After the first deployment, check that the manifest is served as JSON rather than as a download:
+
+```sh
+curl -sI https://ctai-ufba.github.io/water4all-mobile/manifest.webmanifest | grep -i content-type
+```
+
+`application/manifest+json` is what the browser wants. If it comes back as
+`application/octet-stream`, rename the file to `manifest.json` and update the `<link>` in
+`index.html`, the precache list in `public/sw.js`, and `src/__tests__/pwaAssets.test.ts`.
+
+Deployed updates reach a device that has the app cached on its next online load, because
+navigation is network-first and build assets are content-hashed. Bump `CACHE_VERSION` in
+`public/sw.js` when changing the caching rules themselves.
