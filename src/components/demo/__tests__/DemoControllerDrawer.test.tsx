@@ -56,6 +56,52 @@ describe('Demo Controller UI Components', () => {
     });
   });
 
+  describe('Unoptimized baseline summary', () => {
+    /**
+     * Mounts the drawer with the unoptimized baseline active for a given farm profile.
+     */
+    function renderWithUnoptimizedBaseline(farmId: 'small-farm' | 'medium-farm'): void {
+      vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+        activeFarm: FARM_PROFILES[farmId],
+        isAuthenticated: true,
+        login: vi.fn(),
+        logout: vi.fn(),
+        switchFarm: vi.fn(),
+      });
+
+      vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
+        scenario: 'live',
+        isUnoptimizedBaseline: true,
+        simulatedDate: new Date('2026-09-21T12:00:00Z'),
+        elapsedSimulatedHours: 0,
+        isDrawerOpen: true,
+        isOptimizing: false,
+        optimizationProgress: 0,
+        optimizationPhase: '',
+        openDrawer: openDrawerMock,
+        closeDrawer: closeDrawerMock,
+        selectScenario: selectScenarioMock,
+        toggleUnoptimizedBaseline: toggleUnoptimizedBaselineMock,
+        advanceTime: advanceTimeMock,
+        resetTime: resetTimeMock,
+        runOptimization: runOptimizationMock,
+        resetDemo: resetDemoMock,
+      });
+
+      render(<DemoControllerDrawer />);
+    }
+
+    it('reports the truck expense of the active farm, not a fixed figure', () => {
+      renderWithUnoptimizedBaseline('small-farm');
+      expect(screen.getByText(/expenses accrued \(382.50 €\)/i)).toBeInTheDocument();
+    });
+
+    it('reports the higher Medium Farm truck expense', () => {
+      renderWithUnoptimizedBaseline('medium-farm');
+      expect(screen.getByText(/expenses accrued \(840.00 €\)/i)).toBeInTheDocument();
+    });
+  });
+
   describe('DemoFloatingTrigger', () => {
     it('renders floating trigger and calls openDrawer when clicked', () => {
       render(<DemoFloatingTrigger />);
@@ -132,7 +178,7 @@ describe('Demo Controller UI Components', () => {
       expect(screen.getByText('Severe Drought')).toBeInTheDocument();
       expect(screen.getByText('Heavy Storm')).toBeInTheDocument();
       expect(screen.getByText('High Salinity')).toBeInTheDocument();
-      expect(screen.getByText(/Unoptimized Baseline/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Unoptimized Baseline/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Run System Optimization/i })).toBeInTheDocument();
     });
 

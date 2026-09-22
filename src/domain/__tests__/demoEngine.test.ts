@@ -110,6 +110,26 @@ describe('Demo Engine Domain Logic', () => {
       expect(unopt.irrigationMode).toBe('auto');
     });
 
+    it('over-irrigates on an unoptimized schedule above the profile baseline', () => {
+      const unopt = getUnoptimizedBaselineTelemetry(smallFarm);
+
+      // The naive schedule asks for more than the 2.1 m³/day the farm is calibrated for, and
+      // Auto mode runs it in full.
+      expect(unopt.scheduledIrrigationDemand).toBe(2.8);
+      expect(unopt.flows?.irrigationDemand).toBe(2.8);
+
+      const opt = getOptimizedTelemetry(smallFarm);
+      expect(opt.scheduledIrrigationDemand).toBe(2.1);
+      expect(opt.flows?.irrigationDemand).toBeLessThan(unopt.flows!.irrigationDemand);
+    });
+
+    it('carries the unoptimized schedule for Medium Farm too', () => {
+      const unopt = getUnoptimizedBaselineTelemetry(mediumFarm);
+
+      expect(unopt.scheduledIrrigationDemand).toBe(7.2);
+      expect(unopt.flows?.irrigationDemand).toBe(7.2);
+    });
+
     it('provides depleted Blend tank below minimum operating volume for Medium Farm', () => {
       const unopt = getUnoptimizedBaselineTelemetry(mediumFarm);
       expect(unopt.volumes.blend).toBe(12.0);
@@ -156,21 +176,24 @@ describe('Demo Engine Domain Logic', () => {
         smallFarm.tankCapacities
       );
 
-      // Rainwater inflow = 2.4 * (6/24) = 0.6 m³ -> rainwater becomes 20.6 m³
-      // ESA inflow = 1.2 * (6/24) = 0.3 m³ -> esa becomes 6.3 m³
+      // Rainwater inflow = 2.4 * (6/24) = 0.6 m³ -> rainwater accumulates to 20.6 m³
+      // ESA inflow = 1.2 * (6/24) = 0.3 m³ -> esa accumulates to 6.3 m³
       // External inflow = 0 -> external remains 10.0 m³
-      // Consumption = (2.1 + 0.5) * (6/24) = 2.6 * 0.25 = 0.65 m³
-      // Blend volume = 25.0 - 0.65 = 24.35 m³
-      expect(updated.rainwater).toBe(20.6);
-      expect(updated.esa).toBe(6.3);
+      // Consumption = (2.1 + 0.5) * (6/24) = 2.6 * 0.25 = 0.65 m³ -> blend drains to 24.35 m³
+      // Replenishment towards the 28.0 m³ target over 6h = (28.0 - 24.35) * 0.5 = 1.825 m³,
+      // drawn from Rainwater, which holds 16.1 m³ above its 4.5 m³ reserve floor.
+      expect(updated.rainwater).toBe(18.78); // 20.6 - 1.825
+      expect(updated.esa).toBe(6.3); // Untouched: Rainwater covered the whole transfer
       expect(updated.external).toBe(10.0);
-      expect(updated.blend).toBe(24.35);
+      expect(updated.blend).toBe(26.18); // 24.35 + 1.825
     });
 
     it('drains Blend tank down to 0 without going negative under extreme demand', () => {
+      // Sources are empty, so replenishment cannot rescue the Blend tank and the floor at
+      // 0 m³ is the only thing standing between consumption and a negative volume.
       const initialVolumes = {
-        rainwater: 5.0,
-        esa: 2.0,
+        rainwater: 0.0,
+        esa: 0.0,
         external: 5.0,
         blend: 1.0,
       };
@@ -193,6 +216,62 @@ describe('Demo Engine Domain Logic', () => {
       );
 
       expect(updated.blend).toBe(0);
+      expect(updated.rainwater).toBe(0);
+      expect(updated.esa).toBe(0);
+    });
+
+    it('will not pump a source tank below its reserve floor to top up the Blend tank', () => {
+      // Rainwater sits at 4.0 m³, under its 4.5 m³ floor (10% of 45 m³), and ESA at 1.0 m³,
+      // under its 1.2 m³ floor. Neither can give anything up, however far the Blend tank is
+      // from its target volume.
+      const depletedSources = {
+        rainwater: 4.0,
+        esa: 1.0,
+        external: 5.0,
+        blend: 10.0,
+      };
+
+      const noFlow = {
+        rainwaterInflow: 0.0,
+        esaInflow: 0.0,
+        externalInflow: 0.0,
+        irrigationDemand: 0.0,
+        humanUtilityDemand: 0.0,
+        livestockDemand: 0.0,
+      };
+
+      const updated = simulateTimeStep(6, depletedSources, noFlow, smallFarm.tankCapacities);
+
+      expect(updated.rainwater).toBe(4.0);
+      expect(updated.esa).toBe(1.0);
+      expect(updated.blend).toBe(10.0);
+    });
+
+    it('covers the full replenishment need during a heavy catchment event on any farm profile', () => {
+      const volumes = {
+        rainwater: 40.0,
+        esa: 10.0,
+        external: 10.0,
+        blend: 20.0,
+      };
+
+      const noFlow = {
+        rainwaterInflow: 0.0,
+        esaInflow: 0.0,
+        externalInflow: 0.0,
+        irrigationDemand: 0.0,
+        humanUtilityDemand: 0.0,
+        livestockDemand: 0.0,
+      };
+
+      // Small Farm storm inflow never reached the old 10.0 m3/day threshold, so the full
+      // transfer factor only ever applied to the larger profile. The flag makes it explicit.
+      const ordinary = simulateTimeStep(6, volumes, noFlow, smallFarm.tankCapacities, false);
+      const heavy = simulateTimeStep(6, volumes, noFlow, smallFarm.tankCapacities, true);
+
+      // Need towards the 28.0 m3 target is 8.0 m3: half of it at 6h, all of it in a storm.
+      expect(ordinary.blend).toBe(24.0);
+      expect(heavy.blend).toBe(28.0);
     });
 
     it('respects maximum physical tank capacities during heavy inflow', () => {
@@ -276,6 +355,70 @@ describe('Demo Engine Domain Logic', () => {
       expect(result.date.toISOString()).toBe('2026-09-21T12:00:00.000Z');
       expect(result.weather).not.toBeNull();
       expect(result.flows.irrigationDemand).toBeGreaterThan(0);
+    });
+
+    it('integrates full 24h diurnal demand when advancing 24 hours even at night', () => {
+      const nightDate = new Date('2026-09-21T22:00:00.000Z');
+      const initialVolumes = {
+        rainwater: 25.0,
+        esa: 8.0,
+        external: 10.0,
+        blend: 26.0,
+      };
+
+      const result = advanceSimulation(
+        nightDate,
+        24,
+        initialVolumes,
+        smallBaseline.flows,
+        smallFarm,
+        'live'
+      );
+
+      // When advancing 24h, irrigationDemand in modulatedFlows is the full daily baseline flow rate
+      expect(result.flows.irrigationDemand).toBe(smallBaseline.flows.irrigationDemand);
+      expect(result.date.toISOString()).toBe('2026-09-22T22:00:00.000Z');
+    });
+
+    it('increases Blend tank volume during heavy storm replenishment', () => {
+      const initialVolumes = {
+        rainwater: 10.0,
+        esa: 5.0,
+        external: 5.0,
+        blend: 15.0, // Below target 28.0 m³
+      };
+
+      const result = advanceSimulation(
+        new Date('2026-09-21T12:00:00.000Z'),
+        6,
+        initialVolumes,
+        smallBaseline.flows,
+        smallFarm,
+        'storm'
+      );
+
+      // In a heavy storm, rainwater catchment surges and transfers to Blend tank
+      expect(result.volumes.blend).toBeGreaterThan(initialVolumes.blend);
+    });
+
+    it('decreases Blend tank volume during severe drought demand', () => {
+      const initialVolumes = {
+        rainwater: 2.0, // low sources
+        esa: 1.0,
+        external: 5.0,
+        blend: 20.0,
+      };
+
+      const result = advanceSimulation(
+        new Date('2026-09-21T12:00:00.000Z'),
+        6,
+        initialVolumes,
+        smallBaseline.flows,
+        smallFarm,
+        'drought'
+      );
+
+      // In drought, high irrigation demand outpaces available replenishment
       expect(result.volumes.blend).toBeLessThan(initialVolumes.blend);
     });
   });

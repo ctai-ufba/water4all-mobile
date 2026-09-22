@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { Truck, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { calculateTruckDelivery } from '../../domain/supervisoryEngine';
+import { EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3 } from '../../types/telemetry';
 
 /**
  * Props for the WaterTruckModal component.
@@ -182,7 +183,7 @@ export function WaterTruckModal({ isOpen, onClose }: WaterTruckModalProps): Reac
                 >
                   <span className="text-lg font-extrabold">+10 m³</span>
                   <span className="text-[11px] font-medium text-slate-300">
-                    45.00 € (4.50 €/m³)
+                    {`${(10 * EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3).toFixed(2)} € (${EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3.toFixed(2)} €/m³)`}
                   </span>
                 </button>
 
@@ -197,7 +198,7 @@ export function WaterTruckModal({ isOpen, onClose }: WaterTruckModalProps): Reac
                 >
                   <span className="text-lg font-extrabold">+25 m³</span>
                   <span className="text-[11px] font-medium text-slate-300">
-                    112.50 € (4.50 €/m³)
+                    {`${(25 * EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3).toFixed(2)} € (${EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3.toFixed(2)} €/m³)`}
                   </span>
                 </button>
               </div>
@@ -216,7 +217,9 @@ export function WaterTruckModal({ isOpen, onClose }: WaterTruckModalProps): Reac
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <p className="leading-tight">
                   Requested +{selectedVolume} m³ exceeds available headroom ({headroom.toFixed(1)} m³).
-                  Tank will be filled to maximum capacity ({capacity.toFixed(1)} m³).
+                  Only {deliveryPreview.deliveredM3.toFixed(1)} m³ will be delivered, filling the tank to
+                  maximum capacity ({capacity.toFixed(1)} m³) — the full ordered load is still billed at{' '}
+                  {deliveryPreview.addedCostEur.toFixed(2)} €.
                 </p>
               </div>
             ) : null}

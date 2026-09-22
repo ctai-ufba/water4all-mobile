@@ -120,9 +120,11 @@ describe('Supervisory Controls Components', () => {
       expect(screen.getByText(/Available Headroom:/i)).toBeInTheDocument();
       expect(screen.getAllByText(/6.0 m³/i).length).toBeGreaterThanOrEqual(1);
 
-      // Options +10 m³ and +25 m³
+      // Options +10 m³ and +25 m³, priced from the canonical tariff constant
       expect(screen.getByRole('button', { name: /^\+10 m³/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /^\+25 m³/i })).toBeInTheDocument();
+      expect(screen.getByText('45.00 € (4.50 €/m³)')).toBeInTheDocument();
+      expect(screen.getByText('112.50 € (4.50 €/m³)')).toBeInTheDocument();
     });
 
     it('dispatches requestWaterTruck upon confirming order and shows success feedback', () => {
@@ -152,6 +154,19 @@ describe('Supervisory Controls Components', () => {
       expect(requestTruckMock).toHaveBeenCalledWith(10);
       expect(screen.getByText(/Delivery Confirmed!/i)).toBeInTheDocument();
       expect(screen.getByText(/Expense logged: 45.00 €/i)).toBeInTheDocument();
+    });
+
+    it('states the delivered volume and that the full ordered load is still billed when capped', () => {
+      // External tank is 14.0 / 20.0 m³, so the default +10 m³ order caps at 6.0 m³ delivered
+      // while the operator is still charged for all 10 m³ (45.00 €).
+      render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
+
+      expect(
+        screen.getByText(/Only 6.0 m³ will be delivered/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/full ordered load is still billed at 45.00 €/i)
+      ).toBeInTheDocument();
     });
 
     it('disables order confirmation and shows notice when External supply tank is full', () => {
@@ -234,6 +249,54 @@ describe('Supervisory Controls Components', () => {
 
       expect(screen.getByText(/Insufficient water in Rainwater tank/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Execute Transfer/i })).toBeDisabled();
+    });
+
+    it('rejects a volume above the manual operating band even when the tanks could sustain it', () => {
+      // Rainwater holds 28.5 m³ and the Blend tank has 8.5 m³ of headroom, so 7.0 m³ is
+      // physically valid; only the 5.0 m³ manual band should reject it.
+      const executePumpTransferMock = vi.fn();
+
+      vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+        telemetry: mockTelemetry,
+        setTankVolumes: vi.fn(),
+        setFlows: vi.fn(),
+        setIrrigationMode: vi.fn(),
+        requestWaterTruck: vi.fn(),
+        executePumpTransfer: executePumpTransferMock,
+        resetToBaseline: vi.fn(),
+        applySnapshot: vi.fn(),
+      });
+
+      render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
+
+      fireEvent.change(screen.getByLabelText(/Transfer Volume:/i), { target: { value: '7' } });
+
+      expect(
+        screen.getByText(/single manual transfer must be between 0.1 and 5.0 m³/i)
+      ).toBeInTheDocument();
+
+      const executeBtn = screen.getByRole('button', { name: /Execute Transfer/i });
+      expect(executeBtn).toBeDisabled();
+
+      fireEvent.click(executeBtn);
+      expect(executePumpTransferMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty or zero transfer volume', () => {
+      // The input snaps to 0.1 m³ steps, so the only sub-band value it can produce is zero.
+      render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
+
+      fireEvent.change(screen.getByLabelText(/Transfer Volume:/i), { target: { value: '' } });
+
+      expect(screen.getByRole('button', { name: /Execute Transfer/i })).toBeDisabled();
+    });
+
+    it('preselects the ESA tank when the modal is opened with it as the initial source', () => {
+      render(<PumpTransferModal isOpen={true} initialSource="esa" onClose={vi.fn()} />);
+
+      // The readiness preview names the active source tank.
+      expect(screen.getByText(/from ESA tank/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Execute Transfer/i })).toBeEnabled();
     });
 
     it('allows entering an arbitrary transfer volume via number input', () => {

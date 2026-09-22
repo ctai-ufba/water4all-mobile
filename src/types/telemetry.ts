@@ -160,6 +160,15 @@ export interface TelemetrySnapshot {
   cumulativeTruckCost?: number;
   /** Active operational mode of the irrigation network */
   irrigationMode?: IrrigationMode;
+  /**
+   * Scheduled crop irrigation demand in m³/day before irrigation-mode scaling.
+   *
+   * @remarks This is what the irrigation schedule calls for, which an unoptimized farm sets
+   * above its profile baseline. Omit it to keep the farm's calibrated baseline. The effective
+   * demand in flows.irrigationDemand is always derived from this and irrigationMode, never set
+   * independently.
+   */
+  scheduledIrrigationDemand?: number;
 }
 
 /**

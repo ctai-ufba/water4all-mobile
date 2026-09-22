@@ -11,6 +11,30 @@ import { render, screen, act } from '@testing-library/react';
 import { TelemetryProvider, useTelemetry } from '../TelemetryContext';
 import * as AuthContextModule from '../AuthContext';
 import { FARM_PROFILES } from '../../types/farm';
+import { getUnoptimizedBaselineTelemetry } from '../../domain/demoEngine';
+
+/**
+ * Helper testing component that applies the unoptimized demo snapshot on demand.
+ */
+function SnapshotConsumer(): React.JSX.Element {
+  const { telemetry, applySnapshot } = useTelemetry();
+
+  if (!telemetry) {
+    return <div data-testid="no-telemetry">No Telemetry</div>;
+  }
+
+  return (
+    <div>
+      <div data-testid="irrigation-demand">{telemetry.flows.irrigationDemand}</div>
+      <div data-testid="irrigation-mode">{telemetry.irrigationMode}</div>
+      <button
+        onClick={() => applySnapshot(getUnoptimizedBaselineTelemetry(FARM_PROFILES['small-farm']))}
+      >
+        Apply Unoptimized
+      </button>
+    </div>
+  );
+}
 
 /**
  * Helper testing component that consumes TelemetryContext.
@@ -318,6 +342,49 @@ describe('TelemetryContext Seam', () => {
 
     // Clean up
     localStorage.removeItem('water4all_telemetry_small-farm_irrigationMode');
+  });
+
+  it('keeps an applied unoptimized irrigation schedule across a remount', () => {
+    const activeFarm = FARM_PROFILES['small-farm'];
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+      switchFarm: vi.fn(),
+    });
+
+    localStorage.clear();
+
+    const first = render(
+      <TelemetryProvider>
+        <SnapshotConsumer />
+      </TelemetryProvider>
+    );
+
+    // The calibrated schedule is what a fresh farm runs.
+    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('2.1');
+
+    act(() => {
+      screen.getByRole('button', { name: /Apply Unoptimized/i }).click();
+    });
+
+    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('2.8');
+
+    // Remounting stands in for a page reload: the schedule must survive it rather than being
+    // rewritten from the farm profile baseline.
+    first.unmount();
+
+    render(
+      <TelemetryProvider>
+        <SnapshotConsumer />
+      </TelemetryProvider>
+    );
+
+    expect(screen.getByTestId('irrigation-mode')).toHaveTextContent('auto');
+    expect(screen.getByTestId('irrigation-demand')).toHaveTextContent('2.8');
+
+    localStorage.clear();
   });
 });
 

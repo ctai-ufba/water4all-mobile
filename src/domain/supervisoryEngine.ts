@@ -21,17 +21,34 @@ import { roundTo2Decimals } from './telemetryEngine';
 export const ECO_IRRIGATION_RATIO = 0.6;
 
 /**
+ * Smallest volume the operator may move in a single manual pump transfer, in m³.
+ *
+ * @remarks This band is an operating limit on the supervisory interface, not a physical
+ * constraint: validateAndExecutePumpTransfer accepts any positive volume the tanks can
+ * sustain, so callers exposing manual transfers enforce the band themselves. Kept here so
+ * the interface and its validation read the same numbers.
+ */
+export const MIN_MANUAL_TRANSFER_VOLUME_M3 = 0.1;
+
+/**
+ * Largest volume the operator may move in a single manual pump transfer, in m³.
+ *
+ * @remarks See {@link MIN_MANUAL_TRANSFER_VOLUME_M3} for why the engine does not enforce this.
+ */
+export const MAX_MANUAL_TRANSFER_VOLUME_M3 = 5.0;
+
+/**
  * Calculates water added to external supply and incurred financial cost for a truck delivery.
  *
  * @summary Calculate water truck delivery.
  * @description Computes the actual volume added to the external tank, clamped by remaining
  * tank capacity. Calculates the billing cost based on the ordered volume (or delivered volume)
- * using the standard Mediterranean tariff (4.50 EUR/m³).
+ * using the standard Mediterranean tariff.
  *
  * @param currentVolume - Current volume of water in external supply tank in m³.
  * @param capacity - Maximum physical storage capacity of external tank in m³.
  * @param deliveryVolumeM3 - Ordered delivery volume in m³ (+10 or +25 m³).
- * @param costPerM3 - Unit cost in EUR/m³ (defaults to 4.50 EUR/m³).
+ * @param costPerM3 - Unit cost in EUR/m³ (defaults to EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3).
  * @returns WaterTruckDeliveryResult containing delivered volume, new tank volume, cost, and capping flag.
  * @throws Never throws.
  */

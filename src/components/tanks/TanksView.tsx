@@ -218,7 +218,11 @@ export function TanksView(): React.JSX.Element {
         <button
           type="button"
           onClick={() => {
-            setPumpSource('rainwater');
+            // Preselect whichever source tank actually holds more water, so the quick action
+            // can reach the ESA tank too. Ticket 06 requires transfers from either source.
+            setPumpSource(
+              telemetry.tankVolumes.esa > telemetry.tankVolumes.rainwater ? 'esa' : 'rainwater'
+            );
             setIsPumpModalOpen(true);
           }}
           className="flex items-center space-x-2.5 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/50 to-slate-900 p-3.5 shadow-lg hover:border-emerald-500/60 hover:from-emerald-950/70 transition-all text-left group"
@@ -231,7 +235,7 @@ export function TanksView(): React.JSX.Element {
               Pump Transfer
             </div>
             <div className="text-[10px] text-slate-400">
-              To Blend Tank
+              Rainwater / ESA {'->'} Blend Tank
             </div>
           </div>
         </button>
@@ -263,11 +267,14 @@ export function TanksView(): React.JSX.Element {
         onClose={() => setIsTruckModalOpen(false)}
       />
 
-      <PumpTransferModal
-        isOpen={isPumpModalOpen}
-        initialSource={pumpSource}
-        onClose={() => setIsPumpModalOpen(false)}
-      />
+      {/* Mounted only while open so initialSource is honoured on every open, not just the first. */}
+      {isPumpModalOpen && (
+        <PumpTransferModal
+          isOpen
+          initialSource={pumpSource}
+          onClose={() => setIsPumpModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

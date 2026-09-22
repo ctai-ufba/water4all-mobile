@@ -202,6 +202,27 @@ describe('DemoContext', () => {
     );
   });
 
+  it('restores clean baseline tank volumes when switching away from salinity scenario', () => {
+    render(
+      <DemoProvider>
+        <TestConsumer />
+      </DemoProvider>
+    );
+
+    // Switch to salinity
+    act(() => {
+      screen.getByText('Select Salinity').click();
+    });
+    expect(screen.getByTestId('scenario').textContent).toBe('salinity');
+
+    // Switch back to drought
+    act(() => {
+      screen.getByText('Select Drought').click();
+    });
+    expect(screen.getByTestId('scenario').textContent).toBe('drought');
+    expect(setTankVolumesMock).toHaveBeenCalledWith(mockBaseline.volumes);
+  });
+
   it('toggles Unoptimized Baseline on and off', () => {
     render(
       <DemoProvider>

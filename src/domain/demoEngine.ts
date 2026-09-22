@@ -13,6 +13,7 @@ import {
   TelemetrySnapshot,
   getFarmBaseline,
 } from '../types/telemetry';
+import { calculateIrrigationDemand } from './supervisoryEngine';
 import { WeatherData } from '../types/weather';
 import { roundTo2Decimals } from './telemetryEngine';
 import { generateSyntheticWeather } from './syntheticWeatherEngine';
@@ -68,6 +69,26 @@ export const OPTIMIZATION_PHASES: OptimizationPhaseInfo[] = [
 ];
 
 /**
+ * Calibrated crop irrigation schedules per farm profile, in m³/day.
+ *
+ * @remarks These match the profile baselines in BASELINE_TELEMETRY: an optimized farm irrigates
+ * exactly what its calibration calls for, and saves water through the irrigation mode instead.
+ */
+const SMALL_FARM_CALIBRATED_SCHEDULE = 2.1;
+const MEDIUM_FARM_CALIBRATED_SCHEDULE = 5.8;
+
+/**
+ * Unoptimized crop irrigation schedules per farm profile, in m³/day.
+ *
+ * @remarks Deliberately above the calibrated schedules: over-irrigation on a naive fixed
+ * schedule is the defining trait of the unoptimized baseline, and it is what the optimization
+ * demo removes. Expressed as a schedule rather than an effective demand so it survives a reload:
+ * TelemetryProvider re-derives the effective demand from schedule and mode on every load.
+ */
+const SMALL_FARM_UNOPTIMIZED_SCHEDULE = 2.8;
+const MEDIUM_FARM_UNOPTIMIZED_SCHEDULE = 7.2;
+
+/**
  * Pre-computed optimal parameters adhering to ADR 0002 for Mediterranean farm profiles.
  */
 export const OPTIMAL_FARM_PARAMETERS: Record<string, TelemetrySnapshot> = {
@@ -82,12 +103,13 @@ export const OPTIMAL_FARM_PARAMETERS: Record<string, TelemetrySnapshot> = {
       rainwaterInflow: 2.8,
       esaInflow: 1.4,
       externalInflow: 0.0,
-      irrigationDemand: 1.8, // Calibrated eco-deficit irrigation
+      irrigationDemand: calculateIrrigationDemand(SMALL_FARM_CALIBRATED_SCHEDULE, 'eco'),
       humanUtilityDemand: 0.5,
       livestockDemand: 0.0,
     },
     cumulativeTruckCost: 0.0,
     irrigationMode: 'eco',
+    scheduledIrrigationDemand: SMALL_FARM_CALIBRATED_SCHEDULE,
   },
   'medium-farm': {
     volumes: {
@@ -100,12 +122,13 @@ export const OPTIMAL_FARM_PARAMETERS: Record<string, TelemetrySnapshot> = {
       rainwaterInflow: 5.2,
       esaInflow: 3.2,
       externalInflow: 0.5,
-      irrigationDemand: 4.8, // Calibrated eco-deficit irrigation
+      irrigationDemand: calculateIrrigationDemand(MEDIUM_FARM_CALIBRATED_SCHEDULE, 'eco'),
       humanUtilityDemand: 0.8,
       livestockDemand: 1.4,
     },
     cumulativeTruckCost: 0.0,
     irrigationMode: 'eco',
+    scheduledIrrigationDemand: MEDIUM_FARM_CALIBRATED_SCHEDULE,
   },
 };
 
@@ -125,12 +148,13 @@ export const UNOPTIMIZED_BASELINES: Record<string, TelemetrySnapshot> = {
       rainwaterInflow: 0.5,
       esaInflow: 0.6,
       externalInflow: 3.0,
-      irrigationDemand: 2.8, // Excessive uncalibrated demand
+      irrigationDemand: calculateIrrigationDemand(SMALL_FARM_UNOPTIMIZED_SCHEDULE, 'auto'),
       humanUtilityDemand: 0.5,
       livestockDemand: 0.0,
     },
     cumulativeTruckCost: 382.50, // Frequent emergency truck orders
     irrigationMode: 'auto',
+    scheduledIrrigationDemand: SMALL_FARM_UNOPTIMIZED_SCHEDULE,
   },
   'medium-farm': {
     volumes: {
@@ -143,12 +167,13 @@ export const UNOPTIMIZED_BASELINES: Record<string, TelemetrySnapshot> = {
       rainwaterInflow: 1.0,
       esaInflow: 1.2,
       externalInflow: 6.5,
-      irrigationDemand: 7.2, // Excessive uncalibrated demand
+      irrigationDemand: calculateIrrigationDemand(MEDIUM_FARM_UNOPTIMIZED_SCHEDULE, 'auto'),
       humanUtilityDemand: 0.8,
       livestockDemand: 1.4,
     },
     cumulativeTruckCost: 840.00, // High external expenses
     irrigationMode: 'auto',
+    scheduledIrrigationDemand: MEDIUM_FARM_UNOPTIMIZED_SCHEDULE,
   },
 };
 
@@ -301,7 +326,7 @@ export function getScenarioVolumes(
  *
  * @summary Get unoptimized baseline telemetry.
  * @description Returns depleted volumes (Blend tank below minimum operating volume),
- * high external delivery expenses, and uncalibrated demands.
+ * high external delivery expenses, and unoptimized demands.
  *
  * @param farm - Active Mediterranean farm profile.
  * @returns TelemetrySnapshot representing the unoptimized baseline state.
@@ -327,19 +352,52 @@ export function getOptimizedTelemetry(farm: FarmProfile): TelemetrySnapshot {
 }
 
 /**
+ * Fraction of a source tank's capacity withheld from supervisory replenishment.
+ *
+ * @remarks Without a floor, replenishment empties the Rainwater and ESA tanks to hold the Blend
+ * tank at its target volume, so a severe drought would show the Blend tank *rising* while the
+ * sources it drains run dry. Holding back a slice of each source keeps depleted sources from
+ * propping up the Blend tank, which is what makes the drought scenario read as a drought.
+ */
+export const SOURCE_TANK_PUMP_RESERVE_RATIO = 0.1;
+
+/**
+ * Volume a source tank can give up to replenishment without breaching its reserve floor.
+ *
+ * @summary Pumpable volume of a source tank.
+ * @description Returns the stored volume above the tank's reserve floor, or 0 when the tank is
+ * at or below it.
+ *
+ * @param volume - Current stored volume in m³.
+ * @param capacity - Physical tank capacity in m³.
+ * @returns Volume available for transfer in m³, never negative.
+ * @throws Never throws.
+ */
+function pumpableVolume(volume: number, capacity: number): number {
+  return Math.max(0, volume - capacity * SOURCE_TANK_PUMP_RESERVE_RATIO);
+}
+
+/**
  * Simulates temporal progression over an elapsed number of hours (6h or 24h).
  *
  * @summary Simulate time progression step.
  * @description Advances physical water volumes by integrating inflows and consumption over
  * elapsed hours (elapsedDayFraction = hours / 24). Inflows accumulate in source tanks
  * (Rainwater, ESA, External) up to physical capacities, while farm consumption drains the
- * Blend tank. Does not perform premature automated replenishment, allowing presenters to
- * demonstrate dynamic tank level fluctuations and deficit alerts.
+ * Blend tank. Dynamically replenishes the Blend tank from sustainable sources proportional to
+ * the elapsed time step (up to 50% of needed replenishment for 6h, 80% for 24h, and 100% in
+ * a heavy catchment event), allowing presenters to demonstrate dynamic level fluctuations
+ * without premature locking or unrealistic drainage to zero. Replenishment draws only on source
+ * water above SOURCE_TANK_PUMP_RESERVE_RATIO of each source tank's capacity, so depleted sources
+ * cannot hold the Blend tank up during a drought.
  *
  * @param hours - Elapsed virtual time in hours (typically 6 or 24).
  * @param currentVolumes - Current storage volumes in m³.
  * @param flows - Active flow rates in m³/day.
  * @param capacities - Reservoir physical capacities and target volume in m³.
+ * @param isHeavyCatchmentEvent - Whether catchment inflow is heavy enough for the pumps to cover
+ * the full replenishment need in one step. Callers that know the active scenario pass it
+ * explicitly; the default suits ordinary operation.
  * @returns Updated TankVolumeMetrics after elapsed time progression.
  * @throws Never throws.
  */
@@ -347,7 +405,8 @@ export function simulateTimeStep(
   hours: number,
   currentVolumes: TankVolumeMetrics,
   flows: WaterFlowMetrics,
-  capacities: TankCapacities
+  capacities: TankCapacities,
+  isHeavyCatchmentEvent: boolean = false
 ): TankVolumeMetrics {
   const elapsedDayFraction = Math.max(0, hours) / 24.0;
 
@@ -361,12 +420,35 @@ export function simulateTimeStep(
     (flows.irrigationDemand + flows.humanUtilityDemand + flows.livestockDemand) * elapsedDayFraction;
 
   // 3. New source tank volumes capped at physical capacities
-  const newRain = Math.min(capacities.rainwater, currentVolumes.rainwater + rainInflow);
-  const newEsa = Math.min(capacities.esa, currentVolumes.esa + esaInflow);
+  let newRain = Math.min(capacities.rainwater, currentVolumes.rainwater + rainInflow);
+  let newEsa = Math.min(capacities.esa, currentVolumes.esa + esaInflow);
   const newExternal = Math.min(capacities.external, currentVolumes.external + externalInflow);
 
   // 4. Blend tank: subtract consumption drawn by farm operations (minimum 0 m³)
-  const newBlend = Math.max(0, currentVolumes.blend - totalConsumption);
+  const remainingBlend = Math.max(0, currentVolumes.blend - totalConsumption);
+
+  // 5. Dynamic supervisory replenishment towards target volume
+  // Inflow headroom needed in Blend tank up to target volume
+  const targetCapped = Math.min(capacities.targetVolume, capacities.blend);
+  const replenishmentNeeded = Math.max(0, targetCapped - remainingBlend);
+
+  // In heavy storms, rapid catchment transfer covers up to 100% of replenishment needed;
+  // in normal/drought operations, steady pump transfer covers a realistic fraction (50% per 6h,
+  // 80% per 24h). The caller states whether the event is heavy rather than this function
+  // inferring it from an inflow threshold, which only ever held for the larger farm profile.
+  const transferFactor = isHeavyCatchmentEvent ? 1.0 : (hours >= 24 ? 0.8 : 0.5);
+  const transferRequested = replenishmentNeeded * transferFactor;
+
+  // Prioritize sustainable Rainwater first, down to its reserve floor
+  const rainTransfer = Math.min(transferRequested, pumpableVolume(newRain, capacities.rainwater));
+  newRain -= rainTransfer;
+
+  // Supply remainder from ESA atmospheric water generator, down to its reserve floor
+  const remainingNeeded = transferRequested - rainTransfer;
+  const esaTransfer = Math.min(remainingNeeded, pumpableVolume(newEsa, capacities.esa));
+  newEsa -= esaTransfer;
+
+  const newBlend = Math.min(capacities.blend, remainingBlend + rainTransfer + esaTransfer);
 
   return {
     rainwater: roundTo2Decimals(newRain),
@@ -453,8 +535,10 @@ export interface SimulationStepResult {
  *
  * @summary Advance simulation state.
  * @description Coordinates date progression, diurnal weather calculation, diurnal flow
- * recalculation (including live ESA production and modulated irrigation demand), and
- * reservoir volume integration without premature auto-replenishment.
+ * recalculation (including live ESA production and modulated irrigation demand), and reservoir
+ * volume integration. Volume integration replenishes the Blend tank from the source tanks
+ * towards its target volume, in full during the storm scenario and partially otherwise; see
+ * {@link simulateTimeStep} for the reserve floor that bounds it.
  *
  * @param currentDate - Starting simulation Date.
  * @param hours - Elapsed virtual hours (6 or 24).
@@ -487,11 +571,15 @@ export function advanceSimulation(
       farm.esaNominalCapacityM3PerDay
     );
 
-    // Modulate baseline flows with solar day/night cycle
-    const diurnalDemands = calculateDiurnalDemand(newDate.getHours(), baseline.flows);
+    // If advancing a full 24h day, total day demand averages to 1.0x baseline daily flow;
+    // if advancing a 6h segment, modulate with the active solar hour's demand factor
+    const diurnalDemands = hours >= 24
+      ? { ...baseline.flows }
+      : calculateDiurnalDemand(newDate.getHours(), baseline.flows);
+
     modulatedFlows = {
       ...diurnalDemands,
-      esaInflow: diurnalEsa.dailyProductionM3,
+      esaInflow: roundTo2Decimals(diurnalEsa.dailyRateM3),
       rainwaterInflow: currentFlows.rainwaterInflow,
       externalInflow: currentFlows.externalInflow,
     };
@@ -499,20 +587,26 @@ export function advanceSimulation(
     // In simulated scenarios, get scenario-specific weather and flows
     effectiveWeather = getScenarioWeather(scenario, farm, newDate);
     const scenarioFlows = getScenarioFlows(scenario, farm, baseline.flows);
-    // Modulate irrigation demand with diurnal factor
-    const diurnalDemands = calculateDiurnalDemand(newDate.getHours(), scenarioFlows);
+    // If advancing a full 24h day, preserve full scenario demand;
+    // if advancing 6h, modulate irrigation demand with diurnal factor
+    const diurnalDemands = hours >= 24
+      ? scenarioFlows
+      : calculateDiurnalDemand(newDate.getHours(), scenarioFlows);
+
     modulatedFlows = {
       ...scenarioFlows,
       irrigationDemand: diurnalDemands.irrigationDemand,
     };
   }
 
-  // Integrate volumes over elapsed hours using active flows
+  // Integrate volumes over elapsed hours using active flows. The storm scenario is the heavy
+  // catchment event, whatever the farm profile's absolute inflow figures happen to be.
   const newVolumes = simulateTimeStep(
     hours,
     currentVolumes,
     modulatedFlows,
-    farm.tankCapacities
+    farm.tankCapacities,
+    scenario === 'storm'
   );
 
   return {

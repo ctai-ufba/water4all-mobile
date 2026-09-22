@@ -123,8 +123,16 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     };
   }, []);
 
-  // Reset demo state whenever the active farm profile changes
-  useEffect(() => {
+  /**
+   * Resets internal demo state variables to clean initial defaults.
+   *
+   * @summary Reset internal demo state.
+   * @description Clears scenario, unoptimized baseline, time progression, optimization flags, and weather.
+   *
+   * @returns void
+   * @throws Never throws.
+   */
+  const resetInternalDemoState = useCallback((): void => {
     setScenario('live');
     setIsUnoptimizedBaseline(false);
     setSimulatedDate(new Date());
@@ -133,7 +141,12 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     setOptimizationProgress(0);
     setOptimizationPhase('');
     setCustomWeather(null);
-  }, [activeFarm?.id, setCustomWeather]);
+  }, [setCustomWeather]);
+
+  // Reset demo state whenever the active farm profile changes
+  useEffect(() => {
+    resetInternalDemoState();
+  }, [activeFarm?.id, resetInternalDemoState]);
 
   /**
    * Opens the Demo Controller slide-over drawer.
@@ -166,7 +179,8 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    *
    * @summary Select demo scenario.
    * @description Configures weather, inflows, and demands for 'live', 'drought', 'storm', or 'salinity'.
-   * Automatically clears unoptimized baseline comparison to avoid state collisions.
+   * Automatically clears unoptimized baseline comparison to avoid state collisions, and restores
+   * baseline reservoir volumes when transitioning away from the salinity scenario.
    *
    * @param targetScenario - Identifier of the scenario to activate.
    * @returns void
@@ -175,6 +189,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
   const selectScenario = useCallback(
     (targetScenario: DemoScenarioId): void => {
       if (!activeFarm) return;
+      const previousScenario = scenario;
       setScenario(targetScenario);
 
       const baseline = getFarmBaseline(activeFarm.id);
@@ -183,6 +198,11 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
       if (isUnoptimizedBaseline) {
         setIsUnoptimizedBaseline(false);
         resetToBaseline();
+      }
+
+      // If switching away from salinity, restore clean baseline tank volumes
+      if (previousScenario === 'salinity' && targetScenario !== 'salinity') {
+        setTankVolumes({ ...baseline.volumes });
       }
 
       if (targetScenario === 'live') {
@@ -206,14 +226,14 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
         setTankVolumes(scenarioVolumes);
       }
     },
-    [activeFarm, isUnoptimizedBaseline, simulatedDate, telemetry, resetToBaseline, setCustomWeather, setFlows, setTankVolumes]
+    [activeFarm, scenario, isUnoptimizedBaseline, simulatedDate, telemetry, resetToBaseline, setCustomWeather, setFlows, setTankVolumes]
   );
 
   /**
    * Toggles the Unoptimized Baseline comparison mode.
    *
    * @summary Toggle unoptimized baseline.
-   * @description Alternates between calibrated operation and an uncalibrated baseline exhibiting
+   * @description Alternates between calibrated operation and an unoptimized baseline exhibiting
    * depleted reservoirs below minimum operating volume, high costs, and quality violations.
    *
    * @returns void
@@ -354,16 +374,9 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    * @throws Never throws.
    */
   const resetDemo = useCallback((): void => {
-    setScenario('live');
-    setIsUnoptimizedBaseline(false);
-    setSimulatedDate(new Date());
-    setElapsedSimulatedHours(0);
-    setIsOptimizing(false);
-    setOptimizationProgress(0);
-    setOptimizationPhase('');
-    setCustomWeather(null);
+    resetInternalDemoState();
     resetToBaseline();
-  }, [resetToBaseline, setCustomWeather]);
+  }, [resetInternalDemoState, resetToBaseline]);
 
   const contextValue = useMemo<DemoContextType>(
     () => ({

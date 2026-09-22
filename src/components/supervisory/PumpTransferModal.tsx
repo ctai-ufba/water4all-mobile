@@ -1,9 +1,10 @@
 /**
  * @file PumpTransferModal.tsx
  * @summary Modal dialog for manual water pump transfers into the Blend tank.
- * @description Allows the farm operator to select Rainwater tank or ESA tank as the source,
- * specify transfer volume (arbitrary 0.1 to 5.0 m³ or quick presets), validate source availability
- * and Blend tank headroom, and execute the transfer enforcing real-time mass balance conservation.
+ * @description Allows the farm operator to select Rainwater tank or ESA tank as the source and
+ * specify a transfer volume within the manual operating band (quick presets, or any value between
+ * MIN_MANUAL_TRANSFER_VOLUME_M3 and MAX_MANUAL_TRANSFER_VOLUME_M3). Source availability and Blend
+ * tank headroom are validated by the mass-balance engine before the transfer can be executed.
  */
 
 import React, { useState } from 'react';
@@ -11,6 +12,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { ArrowRightLeft, CloudRain, Wind, Cylinder, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { TransferSourceTank } from '../../types/telemetry';
+import {
+  validateAndExecutePumpTransfer,
+  MIN_MANUAL_TRANSFER_VOLUME_M3,
+  MAX_MANUAL_TRANSFER_VOLUME_M3,
+} from '../../domain/supervisoryEngine';
 
 /**
  * Props for the PumpTransferModal component.
@@ -61,11 +67,24 @@ export function PumpTransferModal({
   const blendCapacity = activeFarm.tankCapacities.blend;
   const blendHeadroom = Math.max(0, blendCapacity - blendVolume);
 
-  // Live validation checks
+  // Dry-run the transfer through the engine so the button can never enable a transfer the
+  // engine would reject. validateAndExecutePumpTransfer is pure, so previewing costs nothing.
+  const transferPreview = validateAndExecutePumpTransfer({
+    fromTank,
+    volumeM3,
+    currentVolumes: telemetry.tankVolumes,
+    capacities: activeFarm.tankCapacities,
+  });
+
+  // The engine does not police the operating band, so the interface does.
+  const isOutOfBand =
+    volumeM3 < MIN_MANUAL_TRANSFER_VOLUME_M3 || volumeM3 > MAX_MANUAL_TRANSFER_VOLUME_M3;
+
+  // Retained only to phrase the operator-facing messages, which name the tank the engine
+  // error does not. The engine remains the sole authority on whether a transfer may run.
   const isSourceInsufficient = volumeM3 > sourceVolume;
   const isBlendOverflow = volumeM3 > blendHeadroom;
-  const isZeroOrNegative = volumeM3 <= 0;
-  const isValid = !isSourceInsufficient && !isBlendOverflow && !isZeroOrNegative;
+  const isValid = transferPreview.success && !isOutOfBand;
 
   /**
    * Dispatches the manual pump transfer to the telemetry context and records result.
@@ -232,8 +251,8 @@ export function PumpTransferModal({
                   <input
                     id="pump-volume-input"
                     type="number"
-                    min="0.1"
-                    max="5.0"
+                    min={MIN_MANUAL_TRANSFER_VOLUME_M3}
+                    max={MAX_MANUAL_TRANSFER_VOLUME_M3}
                     step="0.1"
                     value={volumeM3}
                     onChange={(e) => {
@@ -266,7 +285,7 @@ export function PumpTransferModal({
             </div>
 
             {/* Validation & Error Display */}
-            {isSourceInsufficient && (
+            {isSourceInsufficient && !isOutOfBand && (
               <div className="flex items-start space-x-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <p className="leading-tight">
@@ -275,7 +294,17 @@ export function PumpTransferModal({
               </div>
             )}
 
-            {isBlendOverflow && (
+            {isOutOfBand && volumeM3 > 0 && (
+              <div className="flex items-start space-x-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <p className="leading-tight">
+                  A single manual transfer must be between {MIN_MANUAL_TRANSFER_VOLUME_M3.toFixed(1)} and{' '}
+                  {MAX_MANUAL_TRANSFER_VOLUME_M3.toFixed(1)} m³.
+                </p>
+              </div>
+            )}
+
+            {isBlendOverflow && !isOutOfBand && (
               <div className="flex items-start space-x-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <p className="leading-tight">

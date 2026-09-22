@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useDemo } from '../../context/DemoContext';
 import { useAuth } from '../../context/AuthContext';
-import { DemoScenarioId } from '../../domain/demoEngine';
+import { DemoScenarioId, getUnoptimizedBaselineTelemetry } from '../../domain/demoEngine';
 
 /**
  * Scenario option configuration for presentation cards.
@@ -287,7 +287,7 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Contrasts current state with a naive, uncalibrated operation: frequent Blend tank deficits, high external truck expenses, and crop quality violations.
+              Contrasts current state with an unoptimized baseline operating state: frequent Blend tank deficits, high external truck expenses, and crop quality violations.
             </p>
 
             {isUnoptimizedBaseline && (
@@ -295,7 +295,12 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
                 <div className="font-bold text-amber-300">Unoptimized Baseline Active:</div>
                 <ul className="mt-1 list-disc list-inside space-y-0.5 text-amber-200/90">
                   <li>Blend tank below minimum operating volume (alarm triggered)</li>
-                  <li>Cumulative external truck expenses accrued (~380+ €)</li>
+                  <li>
+                    Cumulative external truck expenses accrued
+                    {activeFarm
+                      ? ` (${getUnoptimizedBaselineTelemetry(activeFarm).cumulativeTruckCost?.toFixed(2)} €)`
+                      : ''}
+                  </li>
                   <li>High mineral salinity risking sensitive crop compliance</li>
                 </ul>
               </div>

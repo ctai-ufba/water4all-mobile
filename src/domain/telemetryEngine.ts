@@ -141,7 +141,8 @@ export function calculateDailyBalance(
  *
  * @param localInflow - Inflow from sustainable local sources (Rainwater + ESA) in m³/day.
  * @param totalDemand - Total daily consumption across all farm uses in m³/day.
- * @param costPerM3 - Unit cost of external water truck delivery in EUR/m³ (default: 4.50 €/m³).
+ * @param costPerM3 - Unit cost of external water truck delivery in EUR/m³ (defaults to
+ * EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3).
  * @returns Object with localPercentage (0 to 100%) and dailySavingsEur (EUR/day).
  * @throws Never throws.
  */

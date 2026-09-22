@@ -15,6 +15,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { useAuth } from './AuthContext';
+import { FarmId } from '../types/farm';
 import {
   TankVolumeMetrics,
   WaterFlowMetrics,
@@ -161,6 +162,57 @@ function loadPersisted<T>(key: string, fallback: T): T {
 }
 
 /**
+ * Loads persisted flow rates for a farm with irrigation demand re-derived from its active mode.
+ *
+ * @summary Rehydrate persisted flows.
+ * @description Reads the persisted flow rates and replaces irrigationDemand with the value the
+ * active irrigation mode implies.
+ *
+ * @remarks Irrigation demand is derived state, not stored state: the interface shows a mode and
+ * a rate side by side, so a persisted rate that disagrees with the persisted mode would render a
+ * contradiction. Re-deriving on load is what keeps the two honest. What varies independently is
+ * the scheduled demand, which an unoptimized farm sets above its profile baseline; scaling that
+ * by the mode is the whole rule, and this is the only place it runs on load.
+ *
+ * @param farmId - Active farm profile identifier.
+ * @param mode - Persisted irrigation mode for that farm.
+ * @param scheduledDemand - Persisted scheduled irrigation demand in m³/day.
+ * @returns Persisted flow rates with irrigationDemand consistent with schedule and mode.
+ * @throws Never throws.
+ */
+function rehydrateFlows(
+  farmId: FarmId,
+  mode: IrrigationMode,
+  scheduledDemand: number
+): WaterFlowMetrics {
+  const baseline = getFarmBaseline(farmId);
+  const savedFlows = loadPersisted(`${STORAGE_KEY_PREFIX}${farmId}_flows`, { ...baseline.flows });
+
+  return {
+    ...savedFlows,
+    irrigationDemand: calculateIrrigationDemand(scheduledDemand, mode),
+  };
+}
+
+/**
+ * Reads the persisted scheduled irrigation demand for a farm.
+ *
+ * @summary Load scheduled irrigation demand.
+ * @description Falls back to the farm profile's calibrated baseline demand when nothing has
+ * been persisted, which is the case for any farm that has not run an unoptimized demo state.
+ *
+ * @param farmId - Active farm profile identifier.
+ * @returns Scheduled crop irrigation demand in m³/day.
+ * @throws Never throws.
+ */
+function loadScheduledDemand(farmId: FarmId): number {
+  return loadPersisted<number>(
+    `${STORAGE_KEY_PREFIX}${farmId}_scheduledIrrigation`,
+    getFarmBaseline(farmId).flows.irrigationDemand
+  );
+}
+
+/**
  * Props for the TelemetryProvider component.
  */
 export interface TelemetryProviderProps {
@@ -193,18 +245,11 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
 
   const [flows, setFlowsState] = useState<WaterFlowMetrics | null>(() => {
     if (activeFarm) {
-      const baseline = getFarmBaseline(activeFarm.id);
-      const initialFlows = loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, { ...baseline.flows });
-      // Rehydrate irrigationDemand immediately based on persisted irrigationMode
       const savedMode = loadPersisted<IrrigationMode>(
         `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
         'auto'
       );
-      const adjustedDemand = calculateIrrigationDemand(baseline.flows.irrigationDemand, savedMode);
-      return {
-        ...initialFlows,
-        irrigationDemand: adjustedDemand,
-      };
+      return rehydrateFlows(activeFarm.id, savedMode, loadScheduledDemand(activeFarm.id));
     }
     return null;
   });
@@ -218,6 +263,15 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       );
     }
     return 'auto';
+  });
+
+  // The irrigation schedule the farm is running. Held next to irrigationMode rather than inside
+  // flows because it is a setting the operator's demo state can change, not a measured rate.
+  const [scheduledIrrigationDemand, setScheduledIrrigationDemand] = useState<number>(() => {
+    if (activeFarm) {
+      return loadScheduledDemand(activeFarm.id);
+    }
+    return 0;
   });
 
   const [cumulativeTruckCost, setCumulativeTruckCost] = useState<number>(() => {
@@ -238,15 +292,13 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
         `${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`,
         'auto'
       );
-      const savedFlows = loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`, { ...baseline.flows });
-      const adjustedDemand = calculateIrrigationDemand(baseline.flows.irrigationDemand, savedMode);
+
+      const savedSchedule = loadScheduledDemand(activeFarm.id);
 
       setVolumes(loadPersisted(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`, { ...baseline.volumes }));
-      setFlowsState({
-        ...savedFlows,
-        irrigationDemand: adjustedDemand,
-      });
+      setFlowsState(rehydrateFlows(activeFarm.id, savedMode, savedSchedule));
       setIrrigationModeState(savedMode);
+      setScheduledIrrigationDemand(savedSchedule);
       setCumulativeTruckCost(
         loadPersisted<number>(
           `${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`,
@@ -257,6 +309,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       setVolumes(null);
       setFlowsState(null);
       setIrrigationModeState('auto');
+      setScheduledIrrigationDemand(0);
       setCumulativeTruckCost(0);
     }
   }, [activeFarm?.id]);
@@ -344,13 +397,9 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
         console.warn('Failed to persist irrigationMode to localStorage:', e);
       }
 
-      // Calculate adjusted irrigation demand using the baseline rate
-      const baseline = getFarmBaseline(activeFarm.id);
-      const adjustedDemand = calculateIrrigationDemand(baseline.flows.irrigationDemand, mode);
-
       setFlows((prev) => ({
         ...prev,
-        irrigationDemand: adjustedDemand,
+        irrigationDemand: calculateIrrigationDemand(scheduledIrrigationDemand, mode),
       }));
     }
   };
@@ -461,11 +510,13 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       setVolumes({ ...baseline.volumes });
       setFlowsState({ ...baseline.flows });
       setIrrigationModeState('auto');
+      setScheduledIrrigationDemand(baseline.flows.irrigationDemand);
       setCumulativeTruckCost(0);
       try {
         localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`);
         localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`);
         localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_irrigationMode`);
+        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_scheduledIrrigation`);
         localStorage.removeItem(`${STORAGE_KEY_PREFIX}${activeFarm.id}_truckCost`);
       } catch (e) {
         console.warn('Failed to remove telemetry from localStorage:', e);
@@ -477,17 +528,34 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
    * Atomically applies a telemetry snapshot (volumes, flows, truck costs, and irrigation mode).
    *
    * @summary Apply telemetry snapshot.
-   * @description Sets reservoir volumes, water flows, cumulative truck costs, and irrigation
-   * mode in a single coordinated transition, persisting values to localStorage.
+   * @description Sets reservoir volumes, water flows, the irrigation schedule, cumulative truck
+   * costs, and irrigation mode in a single coordinated transition, persisting values to
+   * localStorage.
+   *
+   * @remarks The snapshot's effective irrigationDemand is recomputed from its scheduled demand
+   * and irrigation mode rather than taken as given, so a snapshot cannot declare a rate that
+   * contradicts the mode the interface will show next to it.
    *
    * @param snapshot - Complete or partial telemetry snapshot to apply.
    * @returns void
    * @throws Never throws.
    */
   const applySnapshot = (snapshot: TelemetrySnapshot): void => {
+    const appliedMode = snapshot.irrigationMode ?? irrigationMode;
+    const appliedSchedule = snapshot.scheduledIrrigationDemand ?? scheduledIrrigationDemand;
+    const appliedFlows = snapshot.flows
+      ? {
+          ...snapshot.flows,
+          irrigationDemand: calculateIrrigationDemand(appliedSchedule, appliedMode),
+        }
+      : undefined;
+
     setVolumes(snapshot.volumes);
-    if (snapshot.flows) {
-      setFlowsState(snapshot.flows);
+    if (appliedFlows) {
+      setFlowsState(appliedFlows);
+    }
+    if (snapshot.scheduledIrrigationDemand !== undefined) {
+      setScheduledIrrigationDemand(snapshot.scheduledIrrigationDemand);
     }
     if (snapshot.cumulativeTruckCost !== undefined) {
       setCumulativeTruckCost(snapshot.cumulativeTruckCost);
@@ -502,10 +570,16 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
           `${STORAGE_KEY_PREFIX}${activeFarm.id}_volumes`,
           JSON.stringify(snapshot.volumes)
         );
-        if (snapshot.flows) {
+        if (appliedFlows) {
           localStorage.setItem(
             `${STORAGE_KEY_PREFIX}${activeFarm.id}_flows`,
-            JSON.stringify(snapshot.flows)
+            JSON.stringify(appliedFlows)
+          );
+        }
+        if (snapshot.scheduledIrrigationDemand !== undefined) {
+          localStorage.setItem(
+            `${STORAGE_KEY_PREFIX}${activeFarm.id}_scheduledIrrigation`,
+            JSON.stringify(snapshot.scheduledIrrigationDemand)
           );
         }
         if (snapshot.cumulativeTruckCost !== undefined) {
