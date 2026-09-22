@@ -1,9 +1,13 @@
 /**
  * @file WeatherCard.tsx
- * @summary Weather monitoring, ESA atmospheric physics, and rainwater catchment card.
- * @description Displays ambient temperature, relative humidity, and 24h precipitation forecast
- * from Open-Meteo (or synthetic fallback), live ESA atmospheric water generation rates,
- * and expected rainwater catchment volume for the active Mediterranean farm profile.
+ * @summary Slim dashboard weather strip.
+ * @description Shows the three ambient metrics an operator glances at - temperature, relative
+ * humidity and the 24-hour rainfall forecast - plus where the reading came from, and opens the
+ * Weather view for anything that needs reasoning about.
+ *
+ * @remarks The ESA production figures, the physics intermediates and the catchment breakdown moved
+ * to the Weather view. The dashboard's job is the glance; a live rate and a daily yield sitting
+ * side by side in a strip invited reading one as the other, which they are not (ADR 0003).
  */
 
 import React from 'react';
@@ -11,92 +15,89 @@ import {
   Thermometer,
   Droplets,
   CloudRain,
-  Wind,
-  RefreshCw,
   SunMedium,
   CheckCircle2,
   AlertTriangle,
+  ChevronRight,
 } from 'lucide-react';
 import { useWeather } from '../../context/WeatherContext';
 import { useAuth } from '../../context/AuthContext';
 
+/** Props for the WeatherCard component. */
+export interface WeatherCardProps {
+  /**
+   * Opens the Weather view.
+   *
+   * @remarks Omit it and the strip renders as static text rather than a control, so the card stays
+   * usable in contexts with nowhere to navigate to.
+   */
+  onOpenWeatherView?: () => void;
+}
+
 /**
- * Live Weather and Physics Card component.
+ * Dashboard weather strip.
  *
- * @summary Live weather and ESA physics dashboard card.
- * @description Integrates real-time ambient observations with physics-based ESA water
- * production rates and rainwater catchment potential.
+ * @summary Ambient conditions strip.
+ * @description Renders current temperature, relative humidity and forecast rainfall with a live or
+ * offline-fallback badge, as a control that opens the Weather view when one is supplied.
  *
- * @returns React.JSX.Element representing the weather and atmospheric physics card.
+ * @param props - Optional navigation callback to the Weather view.
+ * @returns React.JSX.Element representing the weather strip, or an empty fragment without a farm.
  * @throws Never throws.
  */
-export function WeatherCard(): React.JSX.Element {
+export function WeatherCard({ onOpenWeatherView }: WeatherCardProps): React.JSX.Element {
   const { activeFarm } = useAuth();
-  const { weather, loading, esaProduction, catchmentEstimate, refetch } = useWeather();
+  const { weather } = useWeather();
 
   if (!activeFarm) {
     return <></>;
   }
 
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/90 p-5 shadow-xl">
-      {/* Header: Title, Coordinates, Source Indicator, and Refresh Button */}
+  const content = (
+    <>
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2.5">
           <div className="rounded-lg bg-sky-500/10 p-2 text-sky-400 ring-1 ring-sky-500/20">
             <SunMedium className="h-5 w-5" aria-hidden="true" />
           </div>
-          <div>
+          <div className="text-left">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
               Live Weather &bull; {activeFarm.location}
             </span>
-            <h3 className="text-sm font-bold text-white">Ambient Conditions & Generation</h3>
+            <h3 className="text-sm font-bold text-white">Ambient Conditions</h3>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Live vs. Offline Fallback Status Badge */}
           {weather?.isOfflineFallback ? (
             <span
               data-testid="weather-source-badge"
               className="inline-flex items-center space-x-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-400 ring-1 ring-amber-500/30"
-              title="Using synthetic seasonal Mediterranean weather model"
+              title="Using cached or synthetic seasonal Mediterranean weather"
             >
-              <AlertTriangle className="h-3 w-3" />
+              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
               <span>Offline Fallback</span>
             </span>
           ) : (
             <span
               data-testid="weather-source-badge"
               className="inline-flex items-center space-x-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30"
-              title="Live data from Open-Meteo API"
+              title="Live data from Open-Meteo"
             >
-              <CheckCircle2 className="h-3 w-3" />
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
               <span>Open-Meteo Live</span>
             </span>
           )}
 
-          {/* Manual Refresh Button */}
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={loading}
-            aria-label="Refresh weather data"
-            className="rounded-lg bg-slate-800 p-1.5 text-slate-400 transition hover:bg-slate-700 hover:text-white disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${loading ? 'animate-spin text-cyan-400' : ''}`}
-              aria-hidden="true"
-            />
-          </button>
+          {onOpenWeatherView && (
+            <ChevronRight className="h-4 w-4 text-slate-500" aria-hidden="true" />
+          )}
         </div>
       </div>
 
-      {/* Primary Weather Metrics Grid: Temperature, Relative Humidity, 24h Rain Forecast */}
       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        {/* Ambient Temperature */}
         <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/60">
-          <div className="flex items-center justify-center space-x-1 text-slate-400 mb-1">
+          <div className="mb-1 flex items-center justify-center space-x-1 text-slate-400">
             <Thermometer className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
             <span className="text-[11px] font-medium uppercase">Temp</span>
           </div>
@@ -109,9 +110,8 @@ export function WeatherCard(): React.JSX.Element {
           <span className="ml-0.5 text-xs text-slate-400">°C</span>
         </div>
 
-        {/* Relative Humidity */}
         <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/60">
-          <div className="flex items-center justify-center space-x-1 text-slate-400 mb-1">
+          <div className="mb-1 flex items-center justify-center space-x-1 text-slate-400">
             <Droplets className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
             <span className="text-[11px] font-medium uppercase">Humidity</span>
           </div>
@@ -124,9 +124,8 @@ export function WeatherCard(): React.JSX.Element {
           <span className="ml-0.5 text-xs text-slate-400">%</span>
         </div>
 
-        {/* 24-Hour Rain Forecast */}
         <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/60">
-          <div className="flex items-center justify-center space-x-1 text-slate-400 mb-1">
+          <div className="mb-1 flex items-center justify-center space-x-1 text-slate-400">
             <CloudRain className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
             <span className="text-[11px] font-medium uppercase">24h Rain</span>
           </div>
@@ -139,94 +138,24 @@ export function WeatherCard(): React.JSX.Element {
           <span className="ml-0.5 text-xs text-slate-400">mm</span>
         </div>
       </div>
+    </>
+  );
 
-      {/* Physics Generation Sections: ESA Water Generator & Rainwater Catchment */}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-800/80 pt-3 text-xs">
-        {/* ESA Atmospheric Water Generation Sub-card */}
-        <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1.5">
-              <Wind className="h-4 w-4 text-cyan-400" aria-hidden="true" />
-              <span className="font-semibold text-white">ESA Water Generator</span>
-            </div>
-            <span className="text-[10px] text-slate-400">
-              {activeFarm.esaNominalCapacityM3PerDay.toFixed(2)} m³/d nominal
-            </span>
-          </div>
+  const cardClass =
+    'w-full rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/90 p-5 shadow-xl';
 
-          <div className="mt-2.5 flex items-baseline justify-between">
-            <div>
-              <span className="text-slate-400">Live Rate:</span>
-              <p
-                data-testid="esa-live-rate"
-                className="text-base font-bold text-cyan-400"
-              >
-                {esaProduction ? `${esaProduction.hourlyRateLiters.toFixed(1)} L/h` : '--'}
-              </p>
-            </div>
-            <div className="text-right">
-              <span className="text-slate-400">Forecast Yield:</span>
-              <p
-                data-testid="esa-daily-yield"
-                className="text-sm font-semibold text-white"
-              >
-                {esaProduction ? `${esaProduction.dailyRateM3.toFixed(2)} m³/day` : '--'}
-              </p>
-            </div>
-          </div>
+  if (!onOpenWeatherView) {
+    return <div className={cardClass}>{content}</div>;
+  }
 
-          {/*
-            Deliberately not phrased as a percentage "of nominal capacity": nominal is anchored to a
-            25 °C / 90 % RH bench measurement Mediterranean air never reaches, so a healthy unit
-            reads far below it. Worded as equipment performance, a correct 30 % looked like a fault.
-          */}
-          <p className="mt-1.5 text-[10px] text-slate-400">
-            Ambient yield ratio{' '}
-            <span data-testid="esa-ambient-yield-ratio" className="font-semibold text-slate-300">
-              {esaProduction ? `${(esaProduction.ambientYieldRatio * 100).toFixed(0)}%` : '--'}
-            </span>
-            {' '}&bull; set by how much moisture the air holds, not by unit condition.
-          </p>
-        </div>
-
-        {/* Rainwater Catchment Inflow Sub-card */}
-        <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1.5">
-              <CloudRain className="h-4 w-4 text-sky-400" aria-hidden="true" />
-              <span className="font-semibold text-white">Rainwater Catchment</span>
-            </div>
-            <span className="text-[10px] text-slate-400">
-              {activeFarm.catchmentAreaM2} m² area
-            </span>
-          </div>
-
-          <div className="mt-2.5 flex items-baseline justify-between">
-            <div>
-              <span className="text-slate-400">Forecast Inflow:</span>
-              <p
-                data-testid="catchment-inflow-value"
-                className="text-base font-bold text-sky-400"
-              >
-                {catchmentEstimate ? `${catchmentEstimate.forecastInflowM3.toFixed(2)} m³` : '--'}
-              </p>
-            </div>
-            <div className="text-right">
-              <span className="text-slate-400">Collection Area:</span>
-              <p className="text-sm font-semibold text-white">
-                {activeFarm.catchmentAreaM2} m²
-              </p>
-            </div>
-          </div>
-
-          <p className="mt-1.5 text-[10px] text-slate-400">
-            {catchmentEstimate && catchmentEstimate.precipitationForecastMm > 0
-              ? `Expected harvest from ${catchmentEstimate.precipitationForecastMm} mm forecasted rainfall.`
-              : 'No significant rainfall forecasted for the next 24 hours.'}
-          </p>
-        </div>
-      </div>
-    </div>
+  return (
+    <button
+      type="button"
+      onClick={onOpenWeatherView}
+      aria-label="Open Weather view for ESA production and radar detail"
+      className={`${cardClass} text-left transition hover:border-slate-700 hover:bg-slate-800/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500`}
+    >
+      {content}
+    </button>
   );
 }
-

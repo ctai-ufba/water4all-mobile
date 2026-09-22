@@ -72,6 +72,8 @@ describe('DemoContext', () => {
       weather: null,
       loading: false,
       esaProduction: null,
+      esaInstantaneous: null,
+      esaForecast24h: null,
       catchmentEstimate: null,
       refetch: vi.fn(),
       setCustomWeather: setCustomWeatherMock,

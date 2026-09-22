@@ -18,11 +18,25 @@ import { DemoFloatingTrigger } from '../demo/DemoFloatingTrigger';
 export type NavTab = 'dashboard' | 'weather' | 'tanks' | 'quality';
 
 /**
+ * Moves the shell to another primary tab.
+ *
+ * @param tab - Tab to activate.
+ * @returns void
+ */
+export type NavigateToTab = (tab: NavTab) => void;
+
+/**
  * Props for the AppShell component.
  */
 export interface AppShellProps {
-  /** Page or view contents rendered within the application frame, or a render function receiving activeTab */
-  children?: ReactNode | ((tab: NavTab) => ReactNode);
+  /**
+   * Page or view contents, or a render function receiving the active tab and a navigate callback.
+   *
+   * @remarks The navigate callback is how a view reaches another tab: the dashboard's weather strip
+   * opens the Weather view with it. Navigation state stays owned by the shell, which is the only
+   * component that knows the tab set, so views never hold a copy of it.
+   */
+  children?: ReactNode | ((tab: NavTab, navigate: NavigateToTab) => ReactNode);
   /** Optional active tab override for testing or external routing */
   initialTab?: NavTab;
 }
@@ -62,15 +76,16 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
    *
    * @summary Render active tab view.
    * @description Evaluates children (whether passed as a functional render prop or static ReactNode)
-   * against the currently selected tab. Falls back to a standard module placeholder for
-   * tabs not yet implemented or returning null/undefined.
+   * against the currently selected tab, handing the render prop a callback that switches tabs.
+   * Falls back to a standard module placeholder for tabs not yet implemented or returning
+   * null/undefined.
    *
    * @returns ReactNode representing the view component to display in the main content slot.
    * @throws Never throws.
    */
   const renderContent = (): ReactNode => {
     if (typeof children === 'function') {
-      const rendered = children(activeTab);
+      const rendered = children(activeTab, setActiveTab);
       if (rendered !== undefined && rendered !== null) {
         return rendered;
       }
@@ -107,12 +122,32 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
           {renderContent()}
 
           {/*
-            Open-Meteo requires attribution under CC BY 4.0. It sits in the shell rather than on
-            the weather card so it shows on every tab, and it is unconditional: the licence covers
-            the data the app is built on whether or not this particular session reached the API.
+            Every third party the app draws on is credited here rather than on the view that uses
+            it: map tiles and radar appear only on the Weather view, but ODbL and the RainViewer
+            terms are conditions on the app, not on one screen. It is unconditional for the same
+            reason the Open-Meteo credit always was - the licences cover the data the app is built
+            on whether or not this particular session reached any of the three APIs.
           */}
           <footer className="mt-6 px-1 pb-2 text-center text-[10px] leading-relaxed text-slate-500">
-            Weather data by{' '}
+            &copy;{' '}
+            <a
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline decoration-slate-700 underline-offset-2 hover:text-slate-400"
+            >
+              OpenStreetMap
+            </a>{' '}
+            contributors &middot; Radar &copy;{' '}
+            <a
+              href="https://www.rainviewer.com/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline decoration-slate-700 underline-offset-2 hover:text-slate-400"
+            >
+              RainViewer
+            </a>{' '}
+            &middot; Weather data by{' '}
             <a
               href="https://open-meteo.com/"
               target="_blank"
@@ -120,8 +155,8 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
               className="underline decoration-slate-700 underline-offset-2 hover:text-slate-400"
             >
               Open-Meteo.com
-            </a>
-            , licensed under{' '}
+            </a>{' '}
+            (
             <a
               href="https://creativecommons.org/licenses/by/4.0/"
               target="_blank"
@@ -130,7 +165,7 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
             >
               CC BY 4.0
             </a>
-            .
+            )
           </footer>
         </main>
 

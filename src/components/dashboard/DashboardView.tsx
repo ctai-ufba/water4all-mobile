@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { NavTab } from '../layout/AppShell';
 import { useAuth } from '../../context/AuthContext';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { WaterAutonomyCard } from './WaterAutonomyCard';
@@ -16,6 +17,19 @@ import { WaterEfficiencyCard } from './WaterEfficiencyCard';
 import { WeatherCard } from './WeatherCard';
 
 /**
+ * Props for the DashboardView component.
+ */
+export interface DashboardViewProps {
+  /**
+   * Navigates the shell to another primary tab.
+   *
+   * @remarks Supplied by the shell's render prop. Without it the weather strip stays a static
+   * card, which is what the dashboard should degrade to rather than offering a dead control.
+   */
+  onNavigate?: (tab: NavTab) => void;
+}
+
+/**
  * Primary Dashboard screen component.
  *
  * @summary Main dashboard view.
@@ -23,10 +37,11 @@ import { WeatherCard } from './WeatherCard';
  * systems, rendering autonomy metrics, tank volume gauges, threshold breach warnings,
  * mass flow balance, and local sustainability savings.
  *
+ * @param props - Optional tab navigation callback from the application shell.
  * @returns React.JSX.Element representing the complete dashboard screen.
  * @throws Never throws.
  */
-export function DashboardView(): React.JSX.Element {
+export function DashboardView({ onNavigate }: DashboardViewProps = {}): React.JSX.Element {
   const { activeFarm } = useAuth();
   const { telemetry } = useTelemetry();
 
@@ -83,8 +98,10 @@ export function DashboardView(): React.JSX.Element {
         />
       )}
 
-      {/* Live Weather & Physics Generation Card */}
-      <WeatherCard />
+      {/* Slim ambient weather strip; the physics detail lives on the Weather view */}
+      <WeatherCard
+        onOpenWeatherView={onNavigate ? () => onNavigate('weather') : undefined}
+      />
 
       {/* Water Autonomy in Days Card */}
       <WaterAutonomyCard

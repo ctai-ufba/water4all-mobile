@@ -29,6 +29,7 @@
 import { Coordinates, FarmId } from '../types/farm';
 import { HourlyAmbientSeries, WeatherData } from '../types/weather';
 import { generateSyntheticWeather } from '../domain/syntheticWeatherEngine';
+import { createTimeoutSignal } from './requestTimeout';
 
 /**
  * Raw Open-Meteo REST API response schema.
@@ -337,31 +338,14 @@ export async function fetchFarmWeather(
 
   const url = `${OPEN_METEO_BASE_URL}?${queryParams.toString()}`;
 
-  // 3. Setup timeout controller safely across browser and test environments
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  let signal: AbortSignal | undefined;
-
-  try {
-    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-      signal = AbortSignal.timeout(timeoutMs);
-    } else if (typeof AbortController !== 'undefined') {
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      signal = controller.signal;
-    }
-  } catch {
-    // Proceed without signal if environment does not support it
-  }
+  // 3. Time the request out, however the running environment allows it to be timed out
+  const timeout = createTimeoutSignal(timeoutMs);
 
   try {
     const response = await fetch(url, {
-      ...(signal ? { signal } : {}),
+      ...(timeout.signal ? { signal: timeout.signal } : {}),
       headers: { Accept: 'application/json' },
     });
-
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
 
     if (!response.ok) {
       console.warn(`Open-Meteo returned status ${response.status}: ${response.statusText}`);
@@ -379,11 +363,10 @@ export async function fetchFarmWeather(
     cacheFarmWeather(farmId, weather);
     return weather;
   } catch (error) {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
     // Network failure, timeout, or abort - gracefully fall back without throwing
     console.warn('Weather fetch failed, utilizing cached/synthetic Mediterranean fallback:', error);
     return getFallback();
+  } finally {
+    timeout.cancel();
   }
 }

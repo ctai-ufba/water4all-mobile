@@ -115,12 +115,44 @@ describe('AppShell Seam', () => {
     expect(openDrawerMock).toHaveBeenCalledTimes(1);
   });
 
-  describe('Open-Meteo attribution', () => {
-    it('renders the CC BY 4.0 attribution with links to both the source and the licence', () => {
+  describe('tab navigation exposed to views', () => {
+    it('hands the render prop the active tab and a callback that switches tabs', () => {
+      render(
+        <AppShell>
+          {(tab, navigate) => (
+            <div>
+              <span data-testid="active-tab">{tab}</span>
+              <button type="button" onClick={() => navigate('weather')}>
+                Open Weather
+              </button>
+            </div>
+          )}
+        </AppShell>
+      );
+
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('dashboard');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open Weather' }));
+
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('weather');
+    });
+  });
+
+  describe('third-party attribution', () => {
+    it('credits map tiles, radar and weather data, each linked to its source', () => {
       render(
         <AppShell>
           <div data-testid="dashboard-content">Dashboard Content</div>
         </AppShell>
+      );
+
+      expect(screen.getByRole('link', { name: /OpenStreetMap/i })).toHaveAttribute(
+        'href',
+        'https://www.openstreetmap.org/copyright'
+      );
+      expect(screen.getByRole('link', { name: /RainViewer/i })).toHaveAttribute(
+        'href',
+        'https://www.rainviewer.com/'
       );
 
       const source = screen.getByRole('link', { name: /Open-Meteo\.com/i });
@@ -137,9 +169,12 @@ describe('AppShell Seam', () => {
         </AppShell>
       );
 
-      // The licence covers the data the app is built on, so it cannot be a dashboard-only credit.
+      // The licences cover data the app is built on, not one screen that happens to show it, so
+      // this can be neither a dashboard-only nor a Weather-tab-only credit.
       for (const tab of ['Weather', 'Tanks', 'Quality', 'Dashboard']) {
         fireEvent.click(screen.getByRole('button', { name: tab }));
+        expect(screen.getByRole('link', { name: /OpenStreetMap/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /RainViewer/i })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /Open-Meteo\.com/i })).toBeInTheDocument();
       }
     });

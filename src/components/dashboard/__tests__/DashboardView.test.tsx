@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { DashboardView } from '../DashboardView';
 import * as AuthContextModule from '../../../context/AuthContext';
 import * as TelemetryContextModule from '../../../context/TelemetryContext';
@@ -102,6 +102,28 @@ describe('DashboardView Seam', () => {
         energyKwhPerDay: 1474.76,
         integratedDays: 7,
       },
+      esaInstantaneous: {
+        hourlyRateLiters: 38.0,
+        hourlyRateM3: 0.038,
+        dailyRateM3: 0.91,
+        adsorptionPotentialJPerMol: 1200,
+        equilibriumLoadingKgPerKg: 0.15,
+        ambientYieldRatio: 0.76,
+        cyclesPerDay: 2.71,
+        energyKwhPerDay: 1400.0,
+        integratedDays: 7,
+      },
+      esaForecast24h: {
+        hourlyRateLiters: 30.0,
+        hourlyRateM3: 0.03,
+        dailyRateM3: 0.72,
+        adsorptionPotentialJPerMol: 1200,
+        equilibriumLoadingKgPerKg: 0.15,
+        ambientYieldRatio: 0.6,
+        cyclesPerDay: 2.0,
+        energyKwhPerDay: 1100.0,
+        integratedDays: 1,
+      },
       catchmentEstimate: {
         catchmentAreaM2: 380,
         precipitationForecastMm: 2.0,
@@ -139,8 +161,67 @@ describe('DashboardView Seam', () => {
     render(<DashboardView />);
 
     expect(screen.getByText(/Live Weather/i)).toBeInTheDocument();
-    expect(screen.getByText('Ambient Conditions & Generation')).toBeInTheDocument();
+    expect(screen.getByText('Ambient Conditions')).toBeInTheDocument();
     expect(screen.getByText('Open-Meteo Live')).toBeInTheDocument();
+    expect(screen.getByTestId('weather-temp-value')).toHaveTextContent('22.0');
+    expect(screen.getByTestId('weather-humidity-value')).toHaveTextContent('60');
+    expect(screen.getByTestId('weather-rain-value')).toHaveTextContent('2.0');
+  });
+
+  it('opens the Weather view when the ambient strip is pressed', () => {
+    const navigateMock = vi.fn();
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm: mockFarm,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+      switchFarm: vi.fn(),
+    });
+
+    vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+      telemetry: normalTelemetry,
+      setTankVolumes: vi.fn(),
+      setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
+      resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
+    });
+
+    render(<DashboardView onNavigate={navigateMock} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open weather view/i }));
+
+    expect(navigateMock).toHaveBeenCalledWith('weather');
+  });
+
+  it('leaves the ambient strip as plain content when there is nowhere to navigate', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm: mockFarm,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+      switchFarm: vi.fn(),
+    });
+
+    vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+      telemetry: normalTelemetry,
+      setTankVolumes: vi.fn(),
+      setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
+      resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
+    });
+
+    render(<DashboardView />);
+
+    expect(screen.queryByRole('button', { name: /open weather view/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Ambient Conditions')).toBeInTheDocument();
   });
 
   it('renders "Water Autonomy in Days" prominently', () => {

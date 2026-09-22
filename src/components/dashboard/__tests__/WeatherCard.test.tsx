@@ -1,8 +1,8 @@
 /**
  * @file WeatherCard.test.tsx
- * @summary Unit and integration tests for the WeatherCard component.
- * @description Verifies rendering of ambient weather metrics, live ESA physics output,
- * rainwater catchment estimates, live vs. offline badge indicators, and refresh interactions.
+ * @summary Unit tests for the dashboard weather strip.
+ * @description Verifies the three ambient metrics, the live and offline-fallback source badges,
+ * navigation into the Weather view, and that the physics detail moved off the dashboard.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -11,7 +11,11 @@ import { WeatherCard } from '../WeatherCard';
 import * as AuthContextModule from '../../../context/AuthContext';
 import * as WeatherContextModule from '../../../context/WeatherContext';
 import { FARM_PROFILES } from '../../../types/farm';
-import { WeatherData, ESAProductionResult, CatchmentEstimateResult } from '../../../types/weather';
+import {
+  WeatherData,
+  ESAProductionResult,
+  CatchmentEstimateResult,
+} from '../../../types/weather';
 
 describe('WeatherCard Component Seam', () => {
   const smallFarm = FARM_PROFILES['small-farm'];
@@ -48,8 +52,22 @@ describe('WeatherCard Component Seam', () => {
     runoffCoefficient: 0.9,
     firstFlushFactor: 0.95,
     effectiveRunoff: 0.855,
-    forecastInflowM3: 2.60,
+    forecastInflowM3: 2.6,
   };
+
+  /** Installs a weather context returning the given reading. */
+  function mockWeatherContext(weather: WeatherData | null): void {
+    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
+      weather,
+      loading: false,
+      esaProduction: mockEsaProduction,
+      esaInstantaneous: mockEsaProduction,
+      esaForecast24h: { ...mockEsaProduction, dailyRateM3: 0.72, integratedDays: 1 },
+      catchmentEstimate: mockCatchmentEstimate,
+      refetch: vi.fn(),
+      setCustomWeather: vi.fn(),
+    });
+  }
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -62,94 +80,77 @@ describe('WeatherCard Component Seam', () => {
     });
   });
 
-  it('renders ambient weather metrics (temperature, humidity, rain forecast)', () => {
-    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
-      weather: mockWeatherLive,
-      loading: false,
-      esaProduction: mockEsaProduction,
-      catchmentEstimate: mockCatchmentEstimate,
-      refetch: vi.fn(),
-      setCustomWeather: vi.fn(),
-    });
+  it('renders the three ambient metrics and the farm location', () => {
+    mockWeatherContext(mockWeatherLive);
 
     render(<WeatherCard />);
 
     expect(screen.getByTestId('weather-temp-value')).toHaveTextContent('24.5');
     expect(screen.getByTestId('weather-humidity-value')).toHaveTextContent('62');
     expect(screen.getByTestId('weather-rain-value')).toHaveTextContent('8.0');
-    expect(screen.getByTestId('weather-source-badge')).toHaveTextContent('Open-Meteo Live');
     expect(screen.getByText(new RegExp(smallFarm.location, 'i'))).toBeInTheDocument();
   });
 
-  it('renders ESA atmospheric water generator metrics', () => {
-    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
-      weather: mockWeatherLive,
-      loading: false,
-      esaProduction: mockEsaProduction,
-      catchmentEstimate: mockCatchmentEstimate,
-      refetch: vi.fn(),
-      setCustomWeather: vi.fn(),
-    });
+  it('reports the data source as live when the reading came from Open-Meteo', () => {
+    mockWeatherContext(mockWeatherLive);
 
     render(<WeatherCard />);
 
-    expect(screen.getByTestId('esa-live-rate')).toHaveTextContent('42.5 L/h');
-    expect(screen.getByTestId('esa-daily-yield')).toHaveTextContent('1.02 m³/day');
+    expect(screen.getByTestId('weather-source-badge')).toHaveTextContent('Open-Meteo Live');
   });
 
-  it('renders rainwater catchment inflow forecast', () => {
-    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
-      weather: mockWeatherLive,
-      loading: false,
-      esaProduction: mockEsaProduction,
-      catchmentEstimate: mockCatchmentEstimate,
-      refetch: vi.fn(),
-      setCustomWeather: vi.fn(),
-    });
-
-    render(<WeatherCard />);
-
-    expect(screen.getByText('Rainwater Catchment')).toBeInTheDocument();
-    expect(screen.getByTestId('catchment-inflow-value')).toHaveTextContent('2.60 m³');
-    expect(screen.getByText('380 m² area')).toBeInTheDocument();
-  });
-
-  it('displays offline fallback badge when weather originated from synthetic model', () => {
-    const mockWeatherOffline: WeatherData = {
-      ...mockWeatherLive,
-      isOfflineFallback: true,
-    };
-
-    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
-      weather: mockWeatherOffline,
-      loading: false,
-      esaProduction: mockEsaProduction,
-      catchmentEstimate: mockCatchmentEstimate,
-      refetch: vi.fn(),
-      setCustomWeather: vi.fn(),
-    });
+  it('reports the data source as fallback when the reading is cached or synthetic', () => {
+    mockWeatherContext({ ...mockWeatherLive, isOfflineFallback: true });
 
     render(<WeatherCard />);
 
     expect(screen.getByTestId('weather-source-badge')).toHaveTextContent('Offline Fallback');
   });
 
-  it('triggers refetch when clicking the refresh button', () => {
-    const refetchMock = vi.fn();
-    vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
-      weather: mockWeatherLive,
-      loading: false,
-      esaProduction: mockEsaProduction,
-      catchmentEstimate: mockCatchmentEstimate,
-      refetch: refetchMock,
-      setCustomWeather: vi.fn(),
-    });
+  it('opens the Weather view when pressed', () => {
+    const openMock = vi.fn();
+    mockWeatherContext(mockWeatherLive);
+
+    render(<WeatherCard onOpenWeatherView={openMock} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open weather view/i }));
+
+    expect(openMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders as static content when no navigation target is supplied', () => {
+    mockWeatherContext(mockWeatherLive);
 
     render(<WeatherCard />);
 
-    const refreshButton = screen.getByRole('button', { name: /refresh weather data/i });
-    fireEvent.click(refreshButton);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('weather-temp-value')).toBeInTheDocument();
+  });
 
-    expect(refetchMock).toHaveBeenCalledTimes(1);
+  it('carries no ESA or catchment detail; that reasoning belongs on the Weather view', () => {
+    // Guards the split the strip exists for: an instantaneous rate and a daily yield shown side by
+    // side in a glance card invited reading one as the other, and they are different figures.
+    mockWeatherContext(mockWeatherLive);
+
+    render(<WeatherCard />);
+
+    expect(screen.queryByText(/ESA Water Generator/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Rainwater Catchment/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ambient yield ratio/i)).not.toBeInTheDocument();
+  });
+
+  it('renders nothing without an active farm session', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm: null,
+      isAuthenticated: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      switchFarm: vi.fn(),
+    });
+    mockWeatherContext(mockWeatherLive);
+
+    const { container } = render(<WeatherCard />);
+
+    expect(container).toBeEmptyDOMElement();
   });
 });

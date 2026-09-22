@@ -115,6 +115,33 @@ export function buildConstantAmbientSeries(
   };
 }
 
+/**
+ * Takes the leading hours of an ambient forecast series.
+ *
+ * @summary Slice an ambient series to a window.
+ * @description Keeps the first `hours` samples of temperature and humidity, preserving the
+ * series start time. Used to integrate production over a stated window, such as the next day,
+ * rather than over whatever horizon the forecast happens to carry.
+ *
+ * @param series - The hourly ambient series to narrow.
+ * @param hours - Number of leading hours to keep; clamped to the series length.
+ * @returns A series of at most `hours` samples, starting where the input did.
+ * @throws Never throws; a non-positive count yields an empty series.
+ *
+ * @remarks A window shorter than a few days truncates the cycle that straddles its end, because a
+ * cycle spans `adsorptionHours + desorptionHours` and only cycles that finish inside the window
+ * deliver water. A 24-hour window therefore reports a day's *yield*, which sits below the
+ * sustained daily rate; see STEADY_STATE_HORIZON_DAYS.
+ */
+export function sliceAmbientSeries(series: HourlyAmbientSeries, hours: number): HourlyAmbientSeries {
+  const kept = Math.max(0, Math.floor(hours));
+  return {
+    temperatureC: series.temperatureC.slice(0, kept),
+    relativeHumidityPct: series.relativeHumidityPct.slice(0, kept),
+    startTime: series.startTime,
+  };
+}
+
 /** One completed adsorption/desorption cycle of a single ACFF module. */
 interface ESACycleResult {
   /** Water condensed and collected over the cycle, in kg */

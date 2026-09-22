@@ -140,3 +140,15 @@ _Avoid_: Climate averages, weather baseline
 **Rainfall event**:
 A single day on which the synthetic generator delivers rain. Offline precipitation falls as discrete events at the location's climatological frequency rather than as a monthly average spread across every day, because a Mediterranean July is dry throughout with a rare shower.
 _Avoid_: Rain day, precipitation sample
+
+**Instantaneous ESA rate**:
+The production rate the air outside sustains at this moment, expressed in liters per hour (L/h). It answers "is the unit making water right now" and is legitimately zero on a dry afternoon. It is never a daily figure divided by 24, and never stands in for a forecast yield.
+_Avoid_: Live rate, current output
+
+**Forecast yield**:
+The water the ESA unit is expected to collect across a stated forecast window, expressed in cubic meters (m³) with the window named. A 24-hour window holds only two whole 8.5-hour cycles and truncates the third, so a day's yield sits below the sustained daily mean over a longer horizon.
+_Avoid_: Daily production, projected rate
+
+**Radar overlay**:
+The most recent published precipitation radar composite, drawn over the base map of the active farm's site. Coverage is not guaranteed for either location and a region without radar returns the same transparent tile as a region without rain, so the absence of echoes is always stated in words: left unexplained it reads as "no rain", which is a different claim from "no radar". It is served only to zoom 7; past that the host returns a fixed "zoom level not supported" image for every location, so deeper views upscale the last real composite locally.
+_Avoid_: Rain layer, weather map

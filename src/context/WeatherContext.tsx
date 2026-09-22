@@ -21,7 +21,11 @@ import {
   CatchmentEstimateResult,
 } from '../types/weather';
 import { fetchFarmWeather } from '../services/weatherService';
-import { calculateESAProductionFromSeries } from '../domain/esaPhysicsEngine';
+import {
+  calculateESAProductionFromSeries,
+  calculateESAWaterProduction,
+  sliceAmbientSeries,
+} from '../domain/esaPhysicsEngine';
 import { calculateCatchmentInflow } from '../domain/catchmentEngine';
 
 /**
@@ -33,6 +37,9 @@ import { calculateCatchmentInflow } from '../domain/catchmentEngine';
  */
 export const WEATHER_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
+/** Hours of forecast integrated for the day-ahead ESA yield shown on the Weather view. */
+export const ESA_FORECAST_WINDOW_HOURS = 24;
+
 /**
  * Interface defining the WeatherContext shape and methods.
  */
@@ -41,8 +48,24 @@ export interface WeatherContextType {
   weather: WeatherData | null;
   /** Flag indicating whether a weather network request is in progress */
   loading: boolean;
-  /** Live calculated ESA water production metrics, or null */
+  /**
+   * ESA production integrated across the whole forecast horizon the reading carries, or null.
+   *
+   * @remarks The multi-day mean, and the figure the supply derivation is calibrated against. It is
+   * neither the instantaneous rate nor the day-ahead yield; all three are separate questions and
+   * are presented separately.
+   */
   esaProduction: ESAProductionResult | null;
+  /**
+   * ESA production implied by holding the current reading steady, or null.
+   *
+   * @remarks The instantaneous rate: what the air outside sustains right now. Read at a summer
+   * afternoon peak it is legitimately zero, which is why it must never stand in for a daily yield
+   * (ADR 0003).
+   */
+  esaInstantaneous: ESAProductionResult | null;
+  /** ESA production integrated across the next ESA_FORECAST_WINDOW_HOURS of forecast, or null */
+  esaForecast24h: ESAProductionResult | null;
   /** Estimated rainwater catchment inflow from 24h precipitation forecast, or null */
   catchmentEstimate: CatchmentEstimateResult | null;
   /**
@@ -156,6 +179,32 @@ export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.E
     );
   }, [activeFarm, effectiveWeather]);
 
+  // What the air outside sustains right now, held steady. A separate question from the two
+  // integrals, and the one an operator reads as "is it making water at the moment".
+  const esaInstantaneous = useMemo<ESAProductionResult | null>(() => {
+    if (!activeFarm || !effectiveWeather) {
+      return null;
+    }
+    return calculateESAWaterProduction(
+      {
+        temperatureC: effectiveWeather.temperatureC,
+        relativeHumidityPct: effectiveWeather.relativeHumidityPct,
+      },
+      activeFarm.esaNominalCapacityM3PerDay
+    );
+  }, [activeFarm, effectiveWeather]);
+
+  // The day ahead specifically, rather than whatever horizon the forecast happens to carry.
+  const esaForecast24h = useMemo<ESAProductionResult | null>(() => {
+    if (!activeFarm || !effectiveWeather) {
+      return null;
+    }
+    return calculateESAProductionFromSeries(
+      sliceAmbientSeries(effectiveWeather.hourly, ESA_FORECAST_WINDOW_HOURS),
+      activeFarm.esaNominalCapacityM3PerDay
+    );
+  }, [activeFarm, effectiveWeather]);
+
   // Compute estimated rainwater catchment inflow from 24h precipitation forecast
   const catchmentEstimate = useMemo<CatchmentEstimateResult | null>(() => {
     if (!activeFarm || !effectiveWeather) {
@@ -172,11 +221,21 @@ export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.E
       weather: effectiveWeather,
       loading,
       esaProduction,
+      esaInstantaneous,
+      esaForecast24h,
       catchmentEstimate,
       refetch: loadWeather,
       setCustomWeather,
     }),
-    [effectiveWeather, loading, esaProduction, catchmentEstimate, loadWeather]
+    [
+      effectiveWeather,
+      loading,
+      esaProduction,
+      esaInstantaneous,
+      esaForecast24h,
+      catchmentEstimate,
+      loadWeather,
+    ]
   );
 
   return (

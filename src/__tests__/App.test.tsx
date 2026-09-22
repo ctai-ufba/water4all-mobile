@@ -5,7 +5,7 @@
  * logging in with 1 click, seeing AppShell with active farm profile, and logging out.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App';
 import { FARM_PROFILES } from '../types/farm';
@@ -14,6 +14,20 @@ describe('App Root Flow Seam', () => {
   beforeEach(() => {
     localStorage.clear();
   });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Logs in to the Small Farm profile and waits for the shell to settle. */
+  async function loginToSmallFarm(): Promise<void> {
+    fireEvent.click(
+      screen.getByRole('button', { name: new RegExp(FARM_PROFILES['small-farm'].name, 'i') })
+    );
+    await waitFor(() => {
+      expect(screen.getByText(FARM_PROFILES['small-farm'].name)).toBeInTheDocument();
+    });
+  }
 
   it('renders DemoLoginScreen by default when unauthenticated', () => {
     render(<App />);
@@ -133,5 +147,67 @@ describe('App Root Flow Seam', () => {
       expect(screen.getByText(/Simulated Scenarios/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Run System Optimization/i })).toBeInTheDocument();
     });
+  });
+
+  it('renders the Weather view from the navigation bar instead of a module placeholder', async () => {
+    render(<App />);
+    await loginToSmallFarm();
+
+    fireEvent.click(screen.getByRole('button', { name: /^weather$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Weather & Atmospheric Physics/i)).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(/Module scheduled for upcoming implementation phase/i)
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('farm-site-map')).toBeInTheDocument();
+  });
+
+  it('opens the Weather view from the dashboard weather strip', async () => {
+    render(<App />);
+    await loginToSmallFarm();
+
+    fireEvent.click(screen.getByRole('button', { name: /open weather view/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Weather & Atmospheric Physics/i)).toBeInTheDocument();
+    });
+
+    // The physics detail the dashboard strip no longer carries is here, as two distinct figures.
+    expect(screen.getByTestId('esa-instantaneous-rate')).toBeInTheDocument();
+    expect(screen.getByTestId('esa-forecast-24h-yield')).toBeInTheDocument();
+    expect(screen.getByTestId('esa-ambient-yield-ratio')).toBeInTheDocument();
+    expect(screen.getByTestId('catchment-breakdown')).toBeInTheDocument();
+  });
+
+  it('states that radar is unavailable when no frames can be fetched', async () => {
+    // The default test fetch mock answers every request with an Open-Meteo payload, which is not a
+    // radar index; that is exactly the unusable-payload path the map has to survive.
+    render(<App />);
+    await loginToSmallFarm();
+
+    fireEvent.click(screen.getByRole('button', { name: /^weather$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('radar-status')).toHaveTextContent(/Radar unavailable/i);
+    });
+    expect(screen.getByTestId('farm-site-map')).toBeInTheDocument();
+  });
+
+  it('keeps third-party attribution visible when weather falls back to the synthetic model', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unreachable')));
+
+    render(<App />);
+    await loginToSmallFarm();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('weather-source-badge')).toHaveTextContent('Offline Fallback');
+    });
+
+    expect(screen.getByRole('link', { name: /OpenStreetMap/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /RainViewer/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open-Meteo\.com/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /CC BY 4\.0/i })).toBeInTheDocument();
   });
 });
