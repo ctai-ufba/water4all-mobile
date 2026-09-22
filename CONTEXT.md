@@ -13,6 +13,10 @@ Focuses on olive groves and vineyards, relying heavily on rainwater catchment an
 A commercial-scale Mediterranean farm profile located in **Heraklion, Crete, Greece** (35.3387° N, 25.1442° E).
 Features mixed operations including olive trees, vineyards, greenhouse vegetables, and livestock, with higher water throughput and external supply access.
 
+**Profile scale factor**:
+The one-tenth ratio by which each farm profile is reduced from the corresponding `prototipo_water4all` preset. Governs cultivated area, ESA nominal capacity, tank capacities and daily demand; does not govern catchment area, which has no prototype counterpart.
+_Avoid_: Scale-down, size ratio
+
 ## 2. Water Sources and Storage
 
 **Rainwater**:
@@ -22,6 +26,14 @@ _Avoid_: Rain source, roof water
 **ESA water**:
 Water produced from atmospheric humidity using Electric Swing Adsorption (ESA).
 _Avoid_: Air water, atmospheric moisture
+
+**ESA nominal capacity**:
+The reference daily output of an installed ESA unit, anchored to the 25 °C / 90 % RH bench measurement of the physical prototype. It is not the output expected in the field, which in a Mediterranean climate averages around 41 % of it.
+_Avoid_: ESA rating, nameplate output, installed capacity
+
+**Ambient yield ratio**:
+The share of ESA nominal capacity that the current air can actually deliver. A low value means dry air, not a malfunctioning unit.
+_Avoid_: Efficiency factor, ESA efficiency, performance ratio
 
 **External supply**:
 Water delivered from an external connection or municipal water truck.
