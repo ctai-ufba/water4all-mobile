@@ -16,8 +16,10 @@ import {
   advanceSimulatedDate,
   calculateDiurnalDemand,
   advanceSimulation,
+  AdvanceSimulationParams,
   OPTIMIZATION_PHASES,
 } from '../demoEngine';
+import { calculateCatchmentInflow } from '../catchmentEngine';
 import { FARM_PROFILES } from '../../types/farm';
 import { BASELINE_TELEMETRY } from '../../types/telemetry';
 
@@ -25,6 +27,29 @@ describe('Demo Engine Domain Logic', () => {
   const smallFarm = FARM_PROFILES['small-farm'];
   const mediumFarm = FARM_PROFILES['medium-farm'];
   const smallBaseline = BASELINE_TELEMETRY['small-farm'];
+  const mediumBaseline = BASELINE_TELEMETRY['medium-farm'];
+
+  /**
+   * Builds advanceSimulation parameters for the small farm running its calibrated schedule.
+   *
+   * @param overrides - Fields to replace on the calibrated default.
+   * @returns Complete AdvanceSimulationParams for one step.
+   */
+  function advanceParams(
+    overrides: Partial<AdvanceSimulationParams> = {}
+  ): AdvanceSimulationParams {
+    return {
+      currentDate: new Date('2026-09-21T12:00:00.000Z'),
+      hours: 6,
+      currentVolumes: { ...smallBaseline.volumes },
+      currentFlows: { ...smallBaseline.flows },
+      farm: smallFarm,
+      scenario: 'live',
+      irrigationMode: 'auto',
+      scheduledIrrigationDemand: smallBaseline.flows.irrigationDemand,
+      ...overrides,
+    };
+  }
 
   describe('Scenario Weather Generation', () => {
     it('returns null for "live" scenario to preserve real/synthetic weather', () => {
@@ -61,28 +86,28 @@ describe('Demo Engine Domain Logic', () => {
 
   describe('Scenario Flow Adjustments', () => {
     it('increases irrigation demand and zeroes rainwater in drought', () => {
-      const flows = getScenarioFlows('drought', smallBaseline.flows);
+      const flows = getScenarioFlows('drought', smallBaseline.flows, smallFarm);
       expect(flows.rainwaterInflow).toBe(0.0);
       expect(flows.irrigationDemand).toBeGreaterThan(smallBaseline.flows.irrigationDemand);
       expect(flows.esaInflow).toBeLessThan(smallBaseline.flows.esaInflow);
     });
 
     it('surges rainwater catchment and decreases irrigation demand in storm', () => {
-      const flows = getScenarioFlows('storm', smallBaseline.flows);
+      const flows = getScenarioFlows('storm', smallBaseline.flows, smallFarm);
       expect(flows.rainwaterInflow).toBeGreaterThan(smallBaseline.flows.rainwaterInflow * 3);
       expect(flows.irrigationDemand).toBeLessThan(smallBaseline.flows.irrigationDemand);
       expect(flows.esaInflow).toBeGreaterThan(smallBaseline.flows.esaInflow);
     });
 
     it('elevates external supply inflow in salinity scenario', () => {
-      const flows = getScenarioFlows('salinity', smallBaseline.flows);
+      const flows = getScenarioFlows('salinity', smallBaseline.flows, smallFarm);
       expect(flows.externalInflow).toBeGreaterThanOrEqual(2.5);
-      expect(flows.rainwaterInflow).toBe(0.2);
+      expect(flows.rainwaterInflow).toBe(0);
       expect(flows.esaInflow).toBe(0.2);
     });
 
     it('returns untouched baseline flows in live mode', () => {
-      const flows = getScenarioFlows('live', smallBaseline.flows);
+      const flows = getScenarioFlows('live', smallBaseline.flows, smallFarm);
       expect(flows).toEqual(smallBaseline.flows);
     });
   });
@@ -344,12 +369,7 @@ describe('Demo Engine Domain Logic', () => {
       };
 
       const result = advanceSimulation(
-        baseDate,
-        6,
-        initialVolumes,
-        smallBaseline.flows,
-        smallFarm,
-        'live'
+        advanceParams({ currentDate: baseDate, hours: 6, currentVolumes: initialVolumes })
       );
 
       expect(result.date.toISOString()).toBe('2026-09-21T12:00:00.000Z');
@@ -367,12 +387,7 @@ describe('Demo Engine Domain Logic', () => {
       };
 
       const result = advanceSimulation(
-        nightDate,
-        24,
-        initialVolumes,
-        smallBaseline.flows,
-        smallFarm,
-        'live'
+        advanceParams({ currentDate: nightDate, hours: 24, currentVolumes: initialVolumes })
       );
 
       // When advancing 24h, irrigationDemand in modulatedFlows is the full daily baseline flow rate
@@ -389,12 +404,7 @@ describe('Demo Engine Domain Logic', () => {
       };
 
       const result = advanceSimulation(
-        new Date('2026-09-21T12:00:00.000Z'),
-        6,
-        initialVolumes,
-        smallBaseline.flows,
-        smallFarm,
-        'storm'
+        advanceParams({ currentVolumes: initialVolumes, scenario: 'storm' })
       );
 
       // In a heavy storm, rainwater catchment surges and transfers to Blend tank
@@ -410,17 +420,75 @@ describe('Demo Engine Domain Logic', () => {
       };
 
       const result = advanceSimulation(
-        new Date('2026-09-21T12:00:00.000Z'),
-        6,
-        initialVolumes,
-        smallBaseline.flows,
-        smallFarm,
-        'drought'
+        advanceParams({ currentVolumes: initialVolumes, scenario: 'drought' })
       );
 
       // In drought, high irrigation demand outpaces available replenishment
       expect(result.volumes.blend).toBeLessThan(initialVolumes.blend);
     });
   });
-});
+  describe('Scenario Rainwater Catchment', () => {
+    it('derives storm rainwater inflow from the scenario rainfall forecast', () => {
+      const stormWeather = getScenarioWeather('storm');
+      const expected = calculateCatchmentInflow(
+        stormWeather!.precipitationForecast24hMm,
+        smallFarm.catchmentAreaM2
+      ).forecastInflowM3;
 
+      const flows = getScenarioFlows('storm', smallBaseline.flows, smallFarm);
+      expect(flows.rainwaterInflow).toBe(expected);
+    });
+
+    it('harvests more storm rainfall on the farm with the larger collection area', () => {
+      const small = getScenarioFlows('storm', smallBaseline.flows, smallFarm);
+      const medium = getScenarioFlows('storm', mediumBaseline.flows, mediumFarm);
+      expect(medium.rainwaterInflow).toBeGreaterThan(small.rainwaterInflow);
+    });
+
+    it('yields no catchment inflow in the rainless drought scenario', () => {
+      const flows = getScenarioFlows('drought', smallBaseline.flows, smallFarm);
+      expect(flows.rainwaterInflow).toBe(0);
+    });
+
+    it('raises rainwater inflow above baseline when a storm step is advanced', () => {
+      const result = advanceSimulation(advanceParams({ scenario: 'storm' }));
+      expect(result.flows.rainwaterInflow).toBeGreaterThan(smallBaseline.flows.rainwaterInflow);
+    });
+  });
+
+  describe('Operator Irrigation State Across a Simulation Step', () => {
+    it('holds irrigation demand at zero while the operator has irrigation paused', () => {
+      const result = advanceSimulation(advanceParams({ irrigationMode: 'paused' }));
+      expect(result.flows.irrigationDemand).toBe(0);
+    });
+
+    it('keeps an advanced eco step below the same step in auto mode', () => {
+      const auto = advanceSimulation(advanceParams({ irrigationMode: 'auto' }));
+      const eco = advanceSimulation(advanceParams({ irrigationMode: 'eco' }));
+      expect(eco.flows.irrigationDemand).toBeLessThan(auto.flows.irrigationDemand);
+    });
+
+    it('respects a paused operator inside a scenario step as well as a live one', () => {
+      const result = advanceSimulation(
+        advanceParams({ scenario: 'drought', irrigationMode: 'paused' })
+      );
+      expect(result.flows.irrigationDemand).toBe(0);
+    });
+
+    it('carries an unoptimized over-irrigation schedule through a full day step', () => {
+      const unoptimized = getUnoptimizedBaselineTelemetry(smallFarm);
+      const result = advanceSimulation(
+        advanceParams({
+          hours: 24,
+          irrigationMode: unoptimized.irrigationMode,
+          scheduledIrrigationDemand: unoptimized.scheduledIrrigationDemand,
+        })
+      );
+
+      expect(result.flows.irrigationDemand).toBe(unoptimized.scheduledIrrigationDemand);
+      expect(result.flows.irrigationDemand).toBeGreaterThan(
+        smallBaseline.flows.irrigationDemand
+      );
+    });
+  });
+});

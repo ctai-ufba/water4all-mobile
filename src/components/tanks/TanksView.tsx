@@ -220,7 +220,7 @@ export function TanksView(): React.JSX.Element {
           type="button"
           onClick={() => {
             // Preselect whichever source tank actually holds more water, so the quick action
-            // can reach the ESA tank too. Ticket 06 requires transfers from either source.
+            // can reach the ESA tank too: a manual transfer may draw on either source.
             setPumpSource(
               telemetry.tankVolumes.esa > telemetry.tankVolumes.rainwater ? 'esa' : 'rainwater'
             );

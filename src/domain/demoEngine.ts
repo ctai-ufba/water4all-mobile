@@ -8,12 +8,14 @@
 
 import { FarmId, FarmProfile, TankCapacities } from '../types/farm';
 import {
+  IrrigationMode,
   TankVolumeMetrics,
   WaterFlowMetrics,
   TelemetrySnapshot,
   getFarmBaseline,
 } from '../types/telemetry';
 import { calculateIrrigationDemand } from './supervisoryEngine';
+import { calculateCatchmentInflow } from './catchmentEngine';
 import { WeatherData } from '../types/weather';
 import { roundTo2Decimals } from './telemetryEngine';
 import { generateSyntheticWeather } from './syntheticWeatherEngine';
@@ -94,11 +96,12 @@ export const OPTIMIZATION_APPLY_AT_MS =
 /**
  * Calibrated crop irrigation schedules per farm profile, in m³/day.
  *
- * @remarks These match the profile baselines in BASELINE_TELEMETRY: an optimized farm irrigates
+ * @remarks Read from the profile baselines rather than restated here: an optimized farm irrigates
  * exactly what its calibration calls for, and saves water through the irrigation mode instead.
+ * Reading them keeps that identity true by construction, where a copied literal only asserted it.
  */
-const SMALL_FARM_CALIBRATED_SCHEDULE = 2.1;
-const MEDIUM_FARM_CALIBRATED_SCHEDULE = 5.8;
+const SMALL_FARM_CALIBRATED_SCHEDULE = getFarmBaseline('small-farm').flows.irrigationDemand;
+const MEDIUM_FARM_CALIBRATED_SCHEDULE = getFarmBaseline('medium-farm').flows.irrigationDemand;
 
 /**
  * Unoptimized crop irrigation schedules per farm profile, in m³/day.
@@ -259,29 +262,103 @@ export function getScenarioWeather(
 }
 
 /**
+ * The farm's un-modulated operating flows for the active irrigation settings.
+ *
+ * @summary Operating flows for an irrigation state.
+ * @description Takes the profile's calibrated flows and replaces irrigation demand with what the
+ * operator's schedule and mode call for.
+ *
+ * @remarks The base every other demo calculation modulates from. Scenario adjustment and diurnal
+ * modulation both need an un-modulated starting point, and taking the profile calibration directly
+ * is what silently discarded a paused or eco network, and the unoptimized baseline's
+ * over-irrigation, on each scenario switch and time step.
+ *
+ * @param farmId - Active farm profile identifier.
+ * @param scheduledIrrigationDemand - Scheduled crop demand in m³/day, before mode scaling.
+ * @param irrigationMode - Operational mode the irrigation network is running in.
+ * @returns Operating WaterFlowMetrics for that irrigation state.
+ * @throws Never throws.
+ */
+export function getOperatingFlows(
+  farmId: FarmId,
+  scheduledIrrigationDemand: number,
+  irrigationMode: IrrigationMode
+): WaterFlowMetrics {
+  return {
+    ...getFarmBaseline(farmId).flows,
+    irrigationDemand: calculateIrrigationDemand(scheduledIrrigationDemand, irrigationMode),
+  };
+}
+
+/**
+ * Harvestable rainwater inflow implied by a scenario's own rainfall forecast.
+ *
+ * @summary Scenario rainwater catchment inflow.
+ * @description Runs the scenario's declared 24h precipitation through the catchment model for the
+ * farm's collection area. Returns the fallback unchanged for 'live', which declares no rainfall of
+ * its own and keeps whatever inflow the farm is already measuring.
+ *
+ * @remarks A scenario states its weather in one place, so its inflow is derived from that weather
+ * rather than hand-tuned beside it. A multiplier on the profile baseline could contradict the
+ * forecast the same scenario puts on screen, and did: the storm advertised 48 mm while its inflow
+ * ignored them, and identically on both farm profiles despite their different catchment areas.
+ *
+ * @param scenario - Active demonstration scenario.
+ * @param farm - Mediterranean farm profile supplying the catchment area.
+ * @param fallbackInflow - Inflow to keep when the scenario declares no weather of its own.
+ * @returns Rainwater catchment inflow in m³/day.
+ * @throws Never throws.
+ */
+function getScenarioRainwaterInflow(
+  scenario: DemoScenarioId,
+  farm: FarmProfile,
+  fallbackInflow: number
+): number {
+  const scenarioWeather = getScenarioWeather(scenario);
+  if (!scenarioWeather) {
+    return fallbackInflow;
+  }
+
+  return calculateCatchmentInflow(
+    scenarioWeather.precipitationForecast24hMm,
+    farm.catchmentAreaM2
+  ).forecastInflowM3;
+}
+
+/**
  * Computes water flow rates adjusted according to the active demonstration scenario.
  *
  * @summary Calculate scenario water flows.
  * @description Adjusts inflow rates and crop demands to reflect environmental stress or abundance:
- * - 'drought': Inflows drop, irrigation demand increases by 50% due to high evapotranspiration.
- * - 'storm': Rainwater catchment surges by 250%, irrigation demand decreases by 60% due to rain.
+ * - 'drought': ESA output drops, irrigation demand increases by 50% due to high evapotranspiration.
+ * - 'storm': ESA output rises, irrigation demand decreases by 60% due to rain.
  * - 'salinity': External inflow dominates, sustainable inflows decrease.
- * - 'live': Reverts to baseline flows.
+ * - 'live': Reverts to the supplied operating flows.
+ * Rainwater inflow is not adjusted here but derived from each scenario's rainfall forecast; see
+ * {@link getScenarioRainwaterInflow}.
  *
  * @param scenario - Active demonstration scenario.
- * @param baseFlows - Baseline flow rates for the profile.
+ * @param baseFlows - Operating flow rates to adjust, un-modulated by the diurnal cycle.
+ * @param farm - Mediterranean farm profile supplying the catchment area.
  * @returns Adjusted WaterFlowMetrics reflecting scenario conditions.
  * @throws Never throws.
  */
 export function getScenarioFlows(
   scenario: DemoScenarioId,
-  baseFlows: WaterFlowMetrics
+  baseFlows: WaterFlowMetrics,
+  farm: FarmProfile
 ): WaterFlowMetrics {
+  const rainwaterInflow = getScenarioRainwaterInflow(
+    scenario,
+    farm,
+    baseFlows.rainwaterInflow
+  );
+
   switch (scenario) {
     case 'drought':
       return {
         ...baseFlows,
-        rainwaterInflow: 0.0,
+        rainwaterInflow,
         esaInflow: roundTo2Decimals(baseFlows.esaInflow * 0.35),
         irrigationDemand: roundTo2Decimals(baseFlows.irrigationDemand * 1.5),
       };
@@ -289,7 +366,7 @@ export function getScenarioFlows(
     case 'storm':
       return {
         ...baseFlows,
-        rainwaterInflow: roundTo2Decimals(baseFlows.rainwaterInflow * 3.5),
+        rainwaterInflow,
         esaInflow: roundTo2Decimals(baseFlows.esaInflow * 1.25),
         irrigationDemand: roundTo2Decimals(baseFlows.irrigationDemand * 0.4),
       };
@@ -297,14 +374,14 @@ export function getScenarioFlows(
     case 'salinity':
       return {
         ...baseFlows,
-        rainwaterInflow: 0.2,
+        rainwaterInflow,
         esaInflow: 0.2,
         externalInflow: roundTo2Decimals(Math.max(2.5, baseFlows.externalInflow * 2.0)),
       };
 
     case 'live':
     default:
-      return { ...baseFlows };
+      return { ...baseFlows, rainwaterInflow };
   }
 }
 
@@ -550,6 +627,31 @@ export interface SimulationStepResult {
 }
 
 /**
+ * Inputs describing the farm state a single simulation step advances from.
+ *
+ * @remarks Bundled rather than passed positionally because they always travel together, and
+ * because the irrigation pair below is easy to drop silently from a positional call.
+ */
+export interface AdvanceSimulationParams {
+  /** Starting simulation Date */
+  currentDate: Date;
+  /** Elapsed virtual hours (6 or 24) */
+  hours: number;
+  /** Active reservoir volumes in m³ */
+  currentVolumes: TankVolumeMetrics;
+  /** Active flow rates in m³/day */
+  currentFlows: WaterFlowMetrics;
+  /** Active Mediterranean farm profile */
+  farm: FarmProfile;
+  /** Active demonstration scenario identifier */
+  scenario: DemoScenarioId;
+  /** Operational mode the irrigation network is running in */
+  irrigationMode: IrrigationMode;
+  /** Scheduled crop irrigation demand in m³/day, before irrigation-mode scaling */
+  scheduledIrrigationDemand: number;
+}
+
+/**
  * Advances the entire farm simulation state over a temporal step (6h or 24h).
  *
  * @summary Advance simulation state.
@@ -559,25 +661,35 @@ export interface SimulationStepResult {
  * towards its target volume, in full during the storm scenario and partially otherwise; see
  * {@link simulateTimeStep} for the reserve floor that bounds it.
  *
- * @param currentDate - Starting simulation Date.
- * @param hours - Elapsed virtual hours (6 or 24).
- * @param currentVolumes - Active reservoir volumes in m³.
- * @param currentFlows - Active flow rates in m³/day.
- * @param farm - Active Mediterranean farm profile.
- * @param scenario - Active demonstration scenario identifier.
+ * @remarks A step modulates the farm's operating flows, not its profile calibration. Inflows are
+ * physical and are re-derived from the step's weather, but irrigation demand is what the operator
+ * asked for: the schedule scaled by the active mode. Rebuilding it from the calibration instead
+ * would quietly undo a paused or eco irrigation network, and would recalibrate the over-irrigation
+ * that defines the unoptimized baseline, leaving the interface asserting a state it had just
+ * discarded.
+ *
+ * @param params - Farm state and operator irrigation settings to advance from.
  * @returns SimulationStepResult containing updated date, volumes, flows, and weather.
  * @throws Never throws.
  */
-export function advanceSimulation(
-  currentDate: Date,
-  hours: number,
-  currentVolumes: TankVolumeMetrics,
-  currentFlows: WaterFlowMetrics,
-  farm: FarmProfile,
-  scenario: DemoScenarioId
-): SimulationStepResult {
+export function advanceSimulation(params: AdvanceSimulationParams): SimulationStepResult {
+  const {
+    currentDate,
+    hours,
+    currentVolumes,
+    currentFlows,
+    farm,
+    scenario,
+    irrigationMode,
+    scheduledIrrigationDemand,
+  } = params;
+
   const newDate = advanceSimulatedDate(currentDate, hours);
-  const baseline = getFarmBaseline(farm.id);
+  const operatingFlows = getOperatingFlows(
+    farm.id,
+    scheduledIrrigationDemand,
+    irrigationMode
+  );
 
   let effectiveWeather: WeatherData | null = null;
   let modulatedFlows: WaterFlowMetrics;
@@ -590,11 +702,11 @@ export function advanceSimulation(
       farm.esaNominalCapacityM3PerDay
     );
 
-    // If advancing a full 24h day, total day demand averages to 1.0x baseline daily flow;
+    // If advancing a full 24h day, total day demand averages to 1.0x the operating daily flow;
     // if advancing a 6h segment, modulate with the active solar hour's demand factor
     const diurnalDemands = hours >= 24
-      ? { ...baseline.flows }
-      : calculateDiurnalDemand(newDate.getHours(), baseline.flows);
+      ? { ...operatingFlows }
+      : calculateDiurnalDemand(newDate.getHours(), operatingFlows);
 
     modulatedFlows = {
       ...diurnalDemands,
@@ -605,7 +717,7 @@ export function advanceSimulation(
   } else {
     // In simulated scenarios, get scenario-specific weather and flows
     effectiveWeather = getScenarioWeather(scenario, newDate);
-    const scenarioFlows = getScenarioFlows(scenario, baseline.flows);
+    const scenarioFlows = getScenarioFlows(scenario, operatingFlows, farm);
     // If advancing a full 24h day, preserve full scenario demand;
     // if advancing 6h, modulate irrigation demand with diurnal factor
     const diurnalDemands = hours >= 24

@@ -24,7 +24,8 @@ import {
 } from 'lucide-react';
 import { useDemo } from '../../context/DemoContext';
 import { useAuth } from '../../context/AuthContext';
-import { DemoScenarioId, getUnoptimizedBaselineTelemetry } from '../../domain/demoEngine';
+import { useTelemetry } from '../../context/TelemetryContext';
+import { DemoScenarioId, getScenarioWeather } from '../../domain/demoEngine';
 
 /**
  * Scenario option configuration for presentation cards.
@@ -32,7 +33,8 @@ import { DemoScenarioId, getUnoptimizedBaselineTelemetry } from '../../domain/de
 interface ScenarioOption {
   id: DemoScenarioId;
   label: string;
-  description: string;
+  /** What the scenario does to the farm, in words the ambient figures cannot supply */
+  effect: string;
   icon: React.ComponentType<{ className?: string }>;
   accentColor: string;
 }
@@ -41,32 +43,56 @@ const SCENARIO_OPTIONS: ScenarioOption[] = [
   {
     id: 'live',
     label: 'Live Weather',
-    description: 'Real-time Open-Meteo or synthetic seasonal baseline.',
+    effect: 'Real-time Open-Meteo or synthetic seasonal baseline.',
     icon: CloudSun,
     accentColor: 'text-cyan-400 border-cyan-500/50 bg-cyan-950/20',
   },
   {
     id: 'drought',
     label: 'Severe Drought',
-    description: '38.5 °C, 18% RH, zero rain, elevated crop ET₀ demand.',
+    effect: 'Elevated crop ET₀ demand, sources stop replenishing.',
     icon: Flame,
     accentColor: 'text-rose-400 border-rose-500/50 bg-rose-950/20',
   },
   {
     id: 'storm',
     label: 'Heavy Storm',
-    description: '17.5 °C, 95% RH, 48 mm 24h rain, surge in catchment.',
+    effect: 'Catchment surge refills the Blend tank, irrigation backs off.',
     icon: CloudLightning,
     accentColor: 'text-blue-400 border-blue-500/50 bg-blue-950/20',
   },
   {
     id: 'salinity',
     label: 'High Salinity',
-    description: 'External supply dominant, elevated EC & TDS, FAO crop warnings.',
+    effect: 'External supply dominant, elevated EC & TDS, FAO crop warnings.',
     icon: AlertTriangle,
     accentColor: 'text-amber-400 border-amber-500/50 bg-amber-950/20',
   },
 ];
+
+/**
+ * Builds a scenario card's description line.
+ *
+ * @summary Describe a demo scenario.
+ * @description Prefixes the scenario's effect with the ambient figures it actually simulates.
+ *
+ * @remarks The figures are read from the scenario definition rather than written out here. Stated
+ * in both places they drifted apart silently, and a card advertising conditions the simulation is
+ * not running is the one thing a presenter cannot talk their way out of.
+ *
+ * @param option - Scenario card configuration.
+ * @returns Description line for the card.
+ * @throws Never throws.
+ */
+function describeScenario(option: ScenarioOption): string {
+  const scenarioWeather = getScenarioWeather(option.id);
+  if (!scenarioWeather) {
+    return option.effect;
+  }
+
+  const { temperatureC, relativeHumidityPct, precipitationForecast24hMm } = scenarioWeather;
+  return `${temperatureC} °C, ${relativeHumidityPct}% RH, ${precipitationForecast24hMm} mm/24h. ${option.effect}`;
+}
 
 const TIME_ADVANCE_OPTIONS = [
   { hours: 6 as const, label: 'Advance 6 Hours', icon: FastForward },
@@ -116,6 +142,7 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
     resetDemo,
   } = useDemo();
   const { activeFarm } = useAuth();
+  const { telemetry } = useTelemetry();
 
   if (!isDrawerOpen) {
     return null;
@@ -224,6 +251,13 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
               </h3>
             </div>
 
+            {isUnoptimizedBaseline && (
+              <p className="text-[11px] text-amber-300/90 leading-snug">
+                Paused while the Unoptimized Baseline is on: the baseline contrasts calibration,
+                not weather. Turn it off to run a scenario.
+              </p>
+            )}
+
             <div className="space-y-2">
               {SCENARIO_OPTIONS.map((opt) => {
                 const Icon = opt.icon;
@@ -233,10 +267,13 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
                   <button
                     key={opt.id}
                     onClick={() => selectScenario(opt.id)}
+                    disabled={isUnoptimizedBaseline}
                     className={`flex w-full items-start justify-between rounded-xl border p-3 text-left transition-all ${
-                      isSelected
-                        ? opt.accentColor + ' shadow-md'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'
+                      isUnoptimizedBaseline
+                        ? 'border-slate-800/60 bg-slate-950/20 text-slate-500 opacity-50 cursor-not-allowed'
+                        : isSelected
+                          ? opt.accentColor + ' shadow-md'
+                          : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'
                     }`}
                     aria-label={opt.label}
                     aria-pressed={isSelected}
@@ -244,9 +281,15 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
                     <div className="flex items-start space-x-2.5">
                       <Icon className="h-4 w-4 shrink-0 mt-0.5" />
                       <div>
-                        <div className="text-xs font-bold text-white">{opt.label}</div>
+                        <div
+                          className={`text-xs font-bold ${
+                            isUnoptimizedBaseline ? 'text-slate-400' : 'text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </div>
                         <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                          {opt.description}
+                          {describeScenario(opt)}
                         </div>
                       </div>
                     </div>
@@ -287,7 +330,7 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Contrasts current state with an unoptimized baseline operating state: frequent Blend tank deficits, high external truck expenses, and crop quality violations.
+              Contrasts the calibrated farm with an unoptimized one running the same weather: frequent Blend tank deficits, high external truck expenses, and crop quality violations.
             </p>
 
             {isUnoptimizedBaseline && (
@@ -297,9 +340,7 @@ export function DemoControllerDrawer(): React.JSX.Element | null {
                   <li>Blend tank below minimum operating volume (alarm triggered)</li>
                   <li>
                     Cumulative external truck expenses accrued
-                    {activeFarm
-                      ? ` (${getUnoptimizedBaselineTelemetry(activeFarm).cumulativeTruckCost?.toFixed(2)} €)`
-                      : ''}
+                    {telemetry ? ` (${telemetry.cumulativeTruckDeliveryCostEur.toFixed(2)} €)` : ''}
                   </li>
                   <li>High mineral salinity risking sensitive crop compliance</li>
                 </ul>

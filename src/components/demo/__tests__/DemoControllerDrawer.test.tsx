@@ -11,10 +11,55 @@ import { DemoControllerDrawer } from '../DemoControllerDrawer';
 import { DemoFloatingTrigger } from '../DemoFloatingTrigger';
 import * as DemoContextModule from '../../../context/DemoContext';
 import * as AuthContextModule from '../../../context/AuthContext';
-import { FARM_PROFILES } from '../../../types/farm';
+import * as TelemetryContextModule from '../../../context/TelemetryContext';
+import { FarmId, FARM_PROFILES } from '../../../types/farm';
+import { BASELINE_TELEMETRY, TelemetryState } from '../../../types/telemetry';
+import { getUnoptimizedBaselineTelemetry } from '../../../domain/demoEngine';
 
 describe('Demo Controller UI Components', () => {
   const mockFarm = FARM_PROFILES['small-farm'];
+
+  /**
+   * Mocks the telemetry context for a farm carrying a given cumulative truck expense.
+   *
+   * @param farmId - Farm profile to base flows and volumes on.
+   * @param cumulativeTruckDeliveryCostEur - Expense the drawer should report.
+   * @returns void
+   */
+  function mockTelemetryWithTruckCost(
+    farmId: FarmId,
+    cumulativeTruckDeliveryCostEur: number
+  ): void {
+    const baseline = BASELINE_TELEMETRY[farmId];
+    const telemetry: TelemetryState = {
+      tankVolumes: { ...baseline.volumes },
+      flows: { ...baseline.flows },
+      totalStoredVolume: 0,
+      totalInflow: 0,
+      totalConsumption: 0,
+      waterAutonomyDays: 0,
+      netBalance: 0,
+      isSurplus: true,
+      localWaterPercentage: 100,
+      dailySavingsEur: 0,
+      isBelowMinOperatingVolume: false,
+      blendDeficitM3: 0,
+      irrigationMode: 'auto',
+      cumulativeTruckDeliveryCostEur,
+    };
+
+    vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+      telemetry,
+      setTankVolumes: vi.fn(),
+      setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
+      resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: baseline.flows.irrigationDemand,
+    });
+  }
 
   const openDrawerMock = vi.fn();
   const closeDrawerMock = vi.fn();
@@ -27,6 +72,8 @@ describe('Demo Controller UI Components', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+
+    mockTelemetryWithTruckCost('small-farm', 0);
 
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       activeFarm: mockFarm,
@@ -61,6 +108,11 @@ describe('Demo Controller UI Components', () => {
      * Mounts the drawer with the unoptimized baseline active for a given farm profile.
      */
     function renderWithUnoptimizedBaseline(farmId: 'small-farm' | 'medium-farm'): void {
+      mockTelemetryWithTruckCost(
+        farmId,
+        getUnoptimizedBaselineTelemetry(FARM_PROFILES[farmId]).cumulativeTruckCost ?? 0
+      );
+
       vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
         activeFarm: FARM_PROFILES[farmId],
         isAuthenticated: true,
@@ -99,6 +151,20 @@ describe('Demo Controller UI Components', () => {
     it('reports the higher Medium Farm truck expense', () => {
       renderWithUnoptimizedBaseline('medium-farm');
       expect(screen.getByText(/expenses accrued \(840.00 €\)/i)).toBeInTheDocument();
+    });
+    it('disables the scenario cards while the unoptimized baseline holds the farm', () => {
+      renderWithUnoptimizedBaseline('small-farm');
+
+      const droughtCard = screen.getByLabelText('Severe Drought');
+      expect(droughtCard).toBeDisabled();
+
+      fireEvent.click(droughtCard);
+      expect(selectScenarioMock).not.toHaveBeenCalled();
+    });
+
+    it('says why the scenario cards are inactive instead of just deselecting them', () => {
+      renderWithUnoptimizedBaseline('small-farm');
+      expect(screen.getByText(/Turn it off to run a scenario/i)).toBeInTheDocument();
     });
   });
 

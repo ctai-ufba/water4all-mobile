@@ -63,6 +63,7 @@ describe('DemoContext', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: resetToBaselineMock,
       applySnapshot: applySnapshotMock,
+      scheduledIrrigationDemand: mockBaseline.flows.irrigationDemand,
     });
 
     vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
@@ -352,5 +353,62 @@ describe('DemoContext', () => {
     expect(screen.getByTestId('elapsedHours').textContent).toBe('0');
     expect(resetToBaselineMock).toHaveBeenCalled();
   });
-});
+  describe("Operator irrigation state survives demo controls", () => {
+    /**
+     * Re-mocks the telemetry context with a paused irrigation network.
+     *
+     * @returns void
+     */
+    function mockPausedIrrigation(): void {
+      vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+        telemetry: {
+          ...mockTelemetry,
+          irrigationMode: 'paused',
+          flows: { ...mockBaseline.flows, irrigationDemand: 0 },
+        },
+        setTankVolumes: setTankVolumesMock,
+        setFlows: setFlowsMock,
+        setIrrigationMode: vi.fn(),
+        requestWaterTruck: vi.fn(),
+        executePumpTransfer: vi.fn(),
+        resetToBaseline: resetToBaselineMock,
+        applySnapshot: applySnapshotMock,
+        scheduledIrrigationDemand: mockBaseline.flows.irrigationDemand,
+      });
+    }
 
+    it('keeps irrigation demand at zero when advancing time with irrigation paused', () => {
+      mockPausedIrrigation();
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Advance 6h').click();
+      });
+
+      expect(setFlowsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ irrigationDemand: 0 })
+      );
+    });
+
+    it('keeps irrigation demand at zero when switching scenario with irrigation paused', () => {
+      mockPausedIrrigation();
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Select Drought').click();
+      });
+
+      expect(setFlowsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ irrigationDemand: 0 })
+      );
+    });
+  });
+});

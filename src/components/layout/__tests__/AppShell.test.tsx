@@ -11,7 +11,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { AppShell } from '../AppShell';
 import * as AuthContextModule from '../../../context/AuthContext';
 import * as DemoContextModule from '../../../context/DemoContext';
+import * as TelemetryContextModule from '../../../context/TelemetryContext';
 import { FARM_PROFILES } from '../../../types/farm';
+import { BASELINE_TELEMETRY } from '../../../types/telemetry';
 
 describe('AppShell Seam', () => {
   const activeFarm = FARM_PROFILES['small-farm'];
@@ -25,6 +27,19 @@ describe('AppShell Seam', () => {
       login: vi.fn(),
       logout: vi.fn(),
       switchFarm: vi.fn(),
+    });
+    // The Demo drawer reads telemetry for the baseline summary, so the shell needs it mounted
+    // even in the tests that only exercise navigation.
+    vi.spyOn(TelemetryContextModule, 'useTelemetry').mockReturnValue({
+      telemetry: null,
+      setTankVolumes: vi.fn(),
+      setFlows: vi.fn(),
+      setIrrigationMode: vi.fn(),
+      requestWaterTruck: vi.fn(),
+      executePumpTransfer: vi.fn(),
+      resetToBaseline: vi.fn(),
+      applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: BASELINE_TELEMETRY['small-farm'].flows.irrigationDemand,
     });
     vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
       scenario: 'live',

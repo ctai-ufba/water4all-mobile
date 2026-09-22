@@ -80,6 +80,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);
@@ -96,6 +97,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);
@@ -118,6 +120,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);
@@ -153,6 +156,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);
@@ -174,6 +178,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);
@@ -196,6 +201,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);
@@ -215,6 +221,7 @@ describe('TanksView Component', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<TanksView />);

@@ -121,6 +121,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);
@@ -148,6 +149,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);
@@ -176,6 +178,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);
@@ -215,6 +218,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);
@@ -244,6 +248,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);
@@ -272,6 +277,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);
@@ -297,6 +303,7 @@ describe('DashboardView Seam', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
 
     render(<DashboardView />);

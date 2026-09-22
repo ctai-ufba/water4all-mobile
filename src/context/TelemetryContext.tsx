@@ -119,17 +119,26 @@ export interface TelemetryContextType {
    */
   resetToBaseline: () => void;
   /**
-   * Atomically applies a telemetry snapshot (volumes, flows, truck costs, and irrigation mode).
+   * Atomically applies a telemetry snapshot.
    *
    * @summary Apply telemetry snapshot.
-   * @description Sets reservoir volumes, water flows, cumulative truck costs, and irrigation
-   * mode in a single coordinated transition, persisting values to localStorage.
+   * @description Moves the farm to the state the snapshot describes in a single coordinated
+   * transition. Fields the snapshot omits keep their current value. See the implementation for
+   * which of them are derived rather than taken as given.
    *
    * @param snapshot - Complete or partial telemetry snapshot to apply.
    * @returns void
    * @throws Never throws.
    */
   applySnapshot: (snapshot: TelemetrySnapshot) => void;
+  /**
+   * Scheduled crop irrigation demand in m³/day, before irrigation-mode scaling.
+   *
+   * @remarks Exposed separately from telemetry.flows.irrigationDemand, which is that schedule
+   * already scaled by the active mode. Anything recomputing demand needs the unscaled schedule,
+   * or it compounds the mode's scaling on every pass.
+   */
+  scheduledIrrigationDemand: number;
 }
 
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
@@ -301,8 +310,9 @@ function rehydrateFlows(
  * @throws Never throws.
  */
 function loadScheduledDemand(farmId: FarmId): number {
-  return loadPersisted<number>(
-    storageKey(farmId, 'scheduledIrrigation'),
+  return readSlot<number>(
+    farmId,
+    'scheduledIrrigation',
     getFarmBaseline(farmId).flows.irrigationDemand
   );
 }
@@ -340,10 +350,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
 
   const [flows, setFlowsState] = useState<WaterFlowMetrics | null>(() => {
     if (activeFarm) {
-      const savedMode = loadPersisted<IrrigationMode>(
-        storageKey(activeFarm.id, 'irrigationMode'),
-        'auto'
-      );
+      const savedMode = readSlot<IrrigationMode>(activeFarm.id, 'irrigationMode', 'auto');
       return rehydrateFlows(activeFarm.id, savedMode, loadScheduledDemand(activeFarm.id));
     }
     return null;
@@ -352,10 +359,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   // Supervisory control states: irrigation mode and cumulative delivery costs
   const [irrigationMode, setIrrigationModeState] = useState<IrrigationMode>(() => {
     if (activeFarm) {
-      return loadPersisted<IrrigationMode>(
-        storageKey(activeFarm.id, 'irrigationMode'),
-        'auto'
-      );
+      return readSlot<IrrigationMode>(activeFarm.id, 'irrigationMode', 'auto');
     }
     return 'auto';
   });
@@ -371,10 +375,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
 
   const [cumulativeTruckCost, setCumulativeTruckCost] = useState<number>(() => {
     if (activeFarm) {
-      return loadPersisted<number>(
-        storageKey(activeFarm.id, 'truckCost'),
-        0
-      );
+      return readSlot<number>(activeFarm.id, 'truckCost', 0);
     }
     return 0;
   });
@@ -383,10 +384,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   useEffect(() => {
     if (activeFarm) {
       const baseline = getFarmBaseline(activeFarm.id);
-      const savedMode = loadPersisted<IrrigationMode>(
-        storageKey(activeFarm.id, 'irrigationMode'),
-        'auto'
-      );
+      const savedMode = readSlot<IrrigationMode>(activeFarm.id, 'irrigationMode', 'auto');
 
       const savedSchedule = loadScheduledDemand(activeFarm.id);
 
@@ -394,12 +392,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       setFlowsState(rehydrateFlows(activeFarm.id, savedMode, savedSchedule));
       setIrrigationModeState(savedMode);
       setScheduledIrrigationDemand(savedSchedule);
-      setCumulativeTruckCost(
-        loadPersisted<number>(
-          storageKey(activeFarm.id, 'truckCost'),
-          0
-        )
-      );
+      setCumulativeTruckCost(readSlot<number>(activeFarm.id, 'truckCost', 0));
     } else {
       setVolumes(null);
       setFlowsState(null);
@@ -670,8 +663,9 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       executePumpTransfer,
       resetToBaseline,
       applySnapshot,
+      scheduledIrrigationDemand,
     }),
-    [telemetry]
+    [telemetry, scheduledIrrigationDemand]
   );
 
   return (

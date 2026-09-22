@@ -64,6 +64,7 @@ describe('Supervisory Controls Components', () => {
       executePumpTransfer: vi.fn(),
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
     });
   });
 
@@ -91,6 +92,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<IrrigationModeSelector />);
@@ -144,6 +146,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
@@ -187,6 +190,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
@@ -214,6 +218,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -243,6 +248,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: vi.fn(),
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -265,6 +271,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: executePumpTransferMock,
         resetToBaseline: vi.fn(),
         applySnapshot: vi.fn(),
+        scheduledIrrigationDemand: 2.1,
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -319,6 +326,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: executePumpTransferMock,
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -352,6 +360,7 @@ describe('Supervisory Controls Components', () => {
         executePumpTransfer: executePumpTransferMock,
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
+      scheduledIrrigationDemand: 2.1,
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);

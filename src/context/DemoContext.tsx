@@ -21,6 +21,7 @@ import { useTelemetry } from './TelemetryContext';
 import { useWeather } from './WeatherContext';
 import {
   DemoScenarioId,
+  getOperatingFlows,
   getScenarioWeather,
   getScenarioFlows,
   getScenarioVolumes,
@@ -96,6 +97,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
   const { activeFarm } = useAuth();
   const {
     telemetry,
+    scheduledIrrigationDemand,
     setTankVolumes,
     setFlows,
     resetToBaseline,
@@ -184,6 +186,9 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    * Automatically clears unoptimized baseline comparison to avoid state collisions, and restores
    * baseline reservoir volumes when transitioning away from the salinity scenario.
    *
+   * @remarks Scenario flows are derived from the farm's operating flows, so a switch changes the
+   * weather without also reverting a paused or eco irrigation network the operator had set.
+   *
    * @param targetScenario - Identifier of the scenario to activate.
    * @returns void
    * @throws Never throws.
@@ -196,11 +201,20 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
 
       const baseline = getFarmBaseline(activeFarm.id);
 
-      // If unoptimized baseline was active, clear it and restore baseline telemetry
+      // Clearing the baseline resets the farm to its calibrated schedule in auto mode, so the
+      // operating flows below have to be read after it, not before.
       if (isUnoptimizedBaseline) {
         setIsUnoptimizedBaseline(false);
         resetToBaseline();
       }
+
+      const operatingFlows = isUnoptimizedBaseline
+        ? { ...baseline.flows }
+        : getOperatingFlows(
+            activeFarm.id,
+            scheduledIrrigationDemand,
+            telemetry?.irrigationMode ?? 'auto'
+          );
 
       // If switching away from salinity, restore clean baseline tank volumes
       if (previousScenario === 'salinity' && targetScenario !== 'salinity') {
@@ -210,7 +224,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
       if (targetScenario === 'live') {
         // Revert to live Open-Meteo or synthetic seasonal weather
         setCustomWeather(null);
-        setFlows({ ...baseline.flows });
+        setFlows(operatingFlows);
         return;
       }
 
@@ -218,7 +232,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
       const scenarioWeather = getScenarioWeather(targetScenario, simulatedDate);
       setCustomWeather(scenarioWeather);
 
-      const scenarioFlows = getScenarioFlows(targetScenario, baseline.flows);
+      const scenarioFlows = getScenarioFlows(targetScenario, operatingFlows, activeFarm);
       setFlows(scenarioFlows);
 
       // In salinity scenario, skew tank storage to external supply
@@ -228,7 +242,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
         setTankVolumes(scenarioVolumes);
       }
     },
-    [activeFarm, scenario, isUnoptimizedBaseline, simulatedDate, telemetry, resetToBaseline, setCustomWeather, setFlows, setTankVolumes]
+    [activeFarm, scenario, isUnoptimizedBaseline, simulatedDate, telemetry, scheduledIrrigationDemand, resetToBaseline, setCustomWeather, setFlows, setTankVolumes]
   );
 
   /**
@@ -267,6 +281,10 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    * via domain simulation. Updates diurnal solar variation, ESA production, and modulates
    * irrigation demand between day and night cycles.
    *
+   * @remarks The active irrigation mode and schedule are passed into the step rather than left
+   * for it to infer, so advancing time modulates what the farm is actually running instead of
+   * reverting it to the profile calibration.
+   *
    * @param hours - Elapsed hours (6 or 24).
    * @returns void
    * @throws Never throws.
@@ -275,14 +293,16 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     (hours: 6 | 24): void => {
       if (!activeFarm || !telemetry) return;
 
-      const result = advanceSimulation(
-        simulatedDate,
+      const result = advanceSimulation({
+        currentDate: simulatedDate,
         hours,
-        telemetry.tankVolumes,
-        telemetry.flows,
-        activeFarm,
-        scenario
-      );
+        currentVolumes: telemetry.tankVolumes,
+        currentFlows: telemetry.flows,
+        farm: activeFarm,
+        scenario,
+        irrigationMode: telemetry.irrigationMode,
+        scheduledIrrigationDemand,
+      });
 
       setSimulatedDate(result.date);
       setElapsedSimulatedHours((prev) => prev + hours);
@@ -292,7 +312,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
         setCustomWeather(result.weather);
       }
     },
-    [activeFarm, telemetry, simulatedDate, scenario, setTankVolumes, setFlows, setCustomWeather]
+    [activeFarm, telemetry, simulatedDate, scenario, scheduledIrrigationDemand, setTankVolumes, setFlows, setCustomWeather]
   );
 
   /**
