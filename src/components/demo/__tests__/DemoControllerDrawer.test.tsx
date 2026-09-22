@@ -42,6 +42,8 @@ describe('Demo Controller UI Components', () => {
       isSurplus: true,
       localWaterPercentage: 100,
       dailySavingsEur: 0,
+      avoidedTruckCostEur: 0.00,
+      esaEnergyCostEur: 0,
       isBelowMinOperatingVolume: false,
       blendDeficitM3: 0,
       irrigationMode: 'auto',

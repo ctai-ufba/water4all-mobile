@@ -13,6 +13,8 @@ import {
   TelemetryState,
   getFarmBaseline,
   EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3,
+  ELECTRICITY_PRICE_EUR_PER_KWH,
+  ESA_BENCH_SPECIFIC_ENERGY_KWH_PER_M3,
   IrrigationMode,
 } from '../types/telemetry';
 
@@ -132,25 +134,70 @@ export function calculateDailyBalance(
 }
 
 /**
- * Calculates the percentage of demand met by local sources and estimated daily financial savings.
- *
- * @summary Calculate water efficiency and cost savings.
- * @description Evaluates local self-sufficiency by comparing local inflow (Rainwater + ESA)
- * against total agricultural demand. Calculates avoided external delivery costs in EUR,
- * strictly bounded by the actual farm demand replaced.
- *
- * @param localInflow - Inflow from sustainable local sources (Rainwater + ESA) in m³/day.
- * @param totalDemand - Total daily consumption across all farm uses in m³/day.
- * @param costPerM3 - Unit cost of external water truck delivery in EUR/m³ (defaults to
- * EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3).
- * @returns Object with localPercentage (0 to 100%) and dailySavingsEur (EUR/day).
- * @throws Never throws.
+ * Inputs to the water efficiency and savings calculation.
  */
-export function calculateWaterEfficiency(
-  localInflow: number,
-  totalDemand: number,
-  costPerM3: number = EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3
-): { localPercentage: number; dailySavingsEur: number } {
+export interface WaterEfficiencyInputs {
+  /** Inflow from sustainable local sources (Rainwater + ESA) in m³/day */
+  localInflow: number;
+  /** Total daily consumption across all farm uses in m³/day */
+  totalDemand: number;
+  /** ESA share of the local inflow in m³/day; drives the energy charge (defaults to 0) */
+  esaInflow?: number;
+  /**
+   * Electrical energy the ESA unit actually drew in kWh/day.
+   *
+   * @remarks Supply this whenever the physics engine has computed it. Left out, the cost falls
+   * back to `esaInflow` at the bench specific energy, which understates a real Mediterranean draw.
+   */
+  esaEnergyKwhPerDay?: number;
+  /** Unit cost of external water truck delivery in EUR/m³ */
+  costPerM3?: number;
+  /** Unit cost of electricity in EUR/kWh */
+  electricityPriceEurPerKwh?: number;
+}
+
+/**
+ * Water efficiency and the two cost lines that make up net savings.
+ */
+export interface WaterEfficiencyResult {
+  /** Percentage of demand satisfied by local sources (0 - 100%) */
+  localPercentage: number;
+  /** External truck purchases avoided by local water, in EUR/day (never negative) */
+  avoidedTruckCostEur: number;
+  /** Electricity drawn producing ESA water, in EUR/day (never negative) */
+  esaEnergyCostEur: number;
+  /** Net daily saving: avoided purchases less the energy drawn. Negative when ESA costs more
+   * than the water it displaces, which in a Mediterranean climate it does. */
+  dailySavingsEur: number;
+}
+
+/**
+ * Calculates local self-sufficiency and the net daily financial effect of producing water on site.
+ *
+ * @summary Calculate water efficiency and net savings.
+ * @description Compares local inflow (Rainwater + ESA) against total demand, credits the avoided
+ * truck purchases that local water actually displaced, then deducts the electricity ESA drew to
+ * produce its share.
+ *
+ * @param inputs - Inflows, demand, and the cost assumptions to apply.
+ * @returns Local share plus the avoided-cost, energy-cost and net savings lines.
+ * @throws Never throws.
+ *
+ * @remarks Crediting all local water at the truck price with no production cost presented the
+ * farm's most expensive water as a pure saving. ESA water costs roughly 790 EUR/m³ in electricity
+ * against 4.50 EUR/m³ for delivered water, so the honest net is normally negative; ESA earns its
+ * place through autonomy where no truck reaches, not through price.
+ */
+export function calculateWaterEfficiency(inputs: WaterEfficiencyInputs): WaterEfficiencyResult {
+  const {
+    localInflow,
+    totalDemand,
+    esaInflow = 0,
+    esaEnergyKwhPerDay,
+    costPerM3 = EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3,
+    electricityPriceEurPerKwh = ELECTRICITY_PRICE_EUR_PER_KWH,
+  } = inputs;
+
   let percentage: number;
   if (totalDemand <= 0) {
     percentage = localInflow > 0 ? 100 : 0;
@@ -159,13 +206,22 @@ export function calculateWaterEfficiency(
     percentage = Math.min(100, Math.round((localInflow / totalDemand) * 100));
   }
 
-  // Daily savings = avoided water truck purchases (only water that actually replaced demand generates savings)
-  const replacedWater = Math.min(localInflow, Math.max(0, totalDemand));
-  const savings = roundTo2Decimals(replacedWater * costPerM3);
+  // Only water that actually replaced demand avoids a purchase.
+  const replacedWater = Math.min(Math.max(0, localInflow), Math.max(0, totalDemand));
+  const avoidedTruckCostEur = roundTo2Decimals(replacedWater * costPerM3);
+
+  const safeEsaInflow = Math.max(0, esaInflow);
+  const energyKwh =
+    esaEnergyKwhPerDay !== undefined && Number.isFinite(esaEnergyKwhPerDay)
+      ? Math.max(0, esaEnergyKwhPerDay)
+      : safeEsaInflow * ESA_BENCH_SPECIFIC_ENERGY_KWH_PER_M3;
+  const esaEnergyCostEur = roundTo2Decimals(energyKwh * electricityPriceEurPerKwh);
 
   return {
     localPercentage: percentage,
-    dailySavingsEur: savings,
+    avoidedTruckCostEur,
+    esaEnergyCostEur,
+    dailySavingsEur: roundTo2Decimals(avoidedTruckCostEur - esaEnergyCostEur),
   };
 }
 
@@ -229,10 +285,13 @@ export function computeTelemetryState(
 
   // Local inflow consists of sustainable Rainwater and ESA production
   const localInflow = flows.rainwaterInflow + flows.esaInflow;
-  const { localPercentage, dailySavingsEur } = calculateWaterEfficiency(
-    localInflow,
-    totalConsumption
-  );
+  const { localPercentage, dailySavingsEur, avoidedTruckCostEur, esaEnergyCostEur } =
+    calculateWaterEfficiency({
+      localInflow,
+      totalDemand: totalConsumption,
+      esaInflow: flows.esaInflow,
+      esaEnergyKwhPerDay: flows.esaEnergyKwhPerDay,
+    });
 
   const { isBreached, deficitM3 } = checkBlendOperatingVolume(
     volumes.blend,
@@ -250,6 +309,8 @@ export function computeTelemetryState(
     isSurplus,
     localWaterPercentage: localPercentage,
     dailySavingsEur,
+    avoidedTruckCostEur,
+    esaEnergyCostEur,
     isBelowMinOperatingVolume: isBreached,
     blendDeficitM3: deficitM3,
     irrigationMode,

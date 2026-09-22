@@ -122,5 +122,21 @@ A naive, non-calibrated operating state used for demonstration comparison, exhib
 _Avoid_: Uncalibrated mode, raw state
 
 **Water efficiency**:
-The percentage of total farm demand satisfied by local sustainable sources (Rainwater + ESA) versus external water deliveries, alongside estimated daily financial savings.
+The percentage of total farm demand satisfied by local sustainable sources (Rainwater + ESA) versus external water deliveries, alongside the daily financial result. The result is reported as three figures — truck purchases avoided, ESA energy cost, and the net — because local water is not free.
 _Avoid_: Eco score, savings index
+
+**ESA energy cost**:
+The daily electricity cost of running the ESA unit. At roughly 790 EUR/m³ against 4.50 EUR/m³ for delivered water, it normally exceeds the purchases the ESA water displaces; the unit earns its place through autonomy where no delivery reaches, not through price.
+_Avoid_: Running cost, ESA opex
+
+**Hourly forecast series**:
+The sequence of hourly temperature and relative humidity readings that the ESA engine integrates production across. An instantaneous reading is not a substitute: taken at a summer afternoon peak it reports zero for a day that does produce, because the daily total is collected in the humid pre-dawn window.
+_Avoid_: Weather array, forecast data
+
+**Climate normals**:
+The monthly temperature, humidity, diurnal range, rainfall and rainy-day statistics for a farm's location, driving the synthetic offline fallback.
+_Avoid_: Climate averages, weather baseline
+
+**Rainfall event**:
+A single day on which the synthetic generator delivers rain. Offline precipitation falls as discrete events at the location's climatological frequency rather than as a monthly average spread across every day, because a Mediterranean July is dry throughout with a rare shower.
+_Avoid_: Rain day, precipitation sample

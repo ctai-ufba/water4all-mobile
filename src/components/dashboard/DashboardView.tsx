@@ -112,6 +112,8 @@ export function DashboardView(): React.JSX.Element {
       <WaterEfficiencyCard
         localPercentage={telemetry.localWaterPercentage}
         dailySavingsEur={telemetry.dailySavingsEur}
+        avoidedTruckCostEur={telemetry.avoidedTruckCostEur}
+        esaEnergyCostEur={telemetry.esaEnergyCostEur}
       />
     </div>
   );

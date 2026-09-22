@@ -105,6 +105,33 @@ export function AppShell({ children, initialTab = 'dashboard' }: AppShellProps):
         {/* Scrollable Main Content Area */}
         <main className="flex-1 overflow-y-auto px-4 py-4 pb-20">
           {renderContent()}
+
+          {/*
+            Open-Meteo requires attribution under CC BY 4.0. It sits in the shell rather than on
+            the weather card so it shows on every tab, and it is unconditional: the licence covers
+            the data the app is built on whether or not this particular session reached the API.
+          */}
+          <footer className="mt-6 px-1 pb-2 text-center text-[10px] leading-relaxed text-slate-500">
+            Weather data by{' '}
+            <a
+              href="https://open-meteo.com/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline decoration-slate-700 underline-offset-2 hover:text-slate-400"
+            >
+              Open-Meteo.com
+            </a>
+            , licensed under{' '}
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline decoration-slate-700 underline-offset-2 hover:text-slate-400"
+            >
+              CC BY 4.0
+            </a>
+            .
+          </footer>
         </main>
 
         {/* Persistent Floating Demo Presentation Trigger */}

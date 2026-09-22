@@ -8,7 +8,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { WeatherProvider, useWeather } from '../WeatherContext';
+import { WeatherProvider, useWeather, WEATHER_REFRESH_INTERVAL_MS } from '../WeatherContext';
 import * as AuthContextModule from '../AuthContext';
 import * as WeatherServiceModule from '../../services/weatherService';
 import { FARM_PROFILES } from '../../types/farm';
@@ -98,6 +98,11 @@ describe('WeatherContext Seam', () => {
       precipitationForecast24hMm: 10.0,
       isOfflineFallback: false,
       timestamp: '2026-09-20T12:00:00Z',
+      hourly: {
+        temperatureC: new Array(168).fill(22.0),
+        relativeHumidityPct: new Array(168).fill(65),
+        startTime: '2026-09-20T12:00:00Z',
+      },
     };
 
     vi.spyOn(WeatherServiceModule, 'fetchFarmWeather').mockResolvedValue(mockWeather);
@@ -121,5 +126,51 @@ describe('WeatherContext Seam', () => {
 
     // Catchment inflow for 10 mm on 380 m² (0.855 runoff) = 3.25 m³
     expect(screen.getByTestId('catchment-inflow')).toHaveTextContent('3.25');
+  });
+
+  it('refetches weather on an interval, not only on farm change or a manual press', async () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm: FARM_PROFILES['small-farm'],
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+      switchFarm: vi.fn(),
+    });
+
+    const fetchSpy = vi
+      .spyOn(WeatherServiceModule, 'fetchFarmWeather')
+      .mockResolvedValue({
+        temperatureC: 22.0,
+        relativeHumidityPct: 65,
+        currentPrecipitationMm: 0,
+        precipitationForecast24hMm: 0,
+        isOfflineFallback: false,
+        timestamp: '2026-09-20T12:00:00Z',
+        hourly: {
+          temperatureC: new Array(168).fill(22.0),
+          relativeHumidityPct: new Array(168).fill(65),
+          startTime: '2026-09-20T12:00:00Z',
+        },
+      });
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(
+        <WeatherProvider>
+          <TestWeatherConsumer />
+        </WeatherProvider>
+      );
+
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+
+      // A session left open must not keep showing the hour it started.
+      await vi.advanceTimersByTimeAsync(WEATHER_REFRESH_INTERVAL_MS + 100);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+
+      await vi.advanceTimersByTimeAsync(WEATHER_REFRESH_INTERVAL_MS + 100);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

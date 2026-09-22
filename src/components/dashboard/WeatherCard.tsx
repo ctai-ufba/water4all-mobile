@@ -150,7 +150,7 @@ export function WeatherCard(): React.JSX.Element {
               <span className="font-semibold text-white">ESA Water Generator</span>
             </div>
             <span className="text-[10px] text-slate-400">
-              {activeFarm.esaNominalCapacityM3PerDay.toFixed(1)} m³/d nominal
+              {activeFarm.esaNominalCapacityM3PerDay.toFixed(2)} m³/d nominal
             </span>
           </div>
 
@@ -165,7 +165,7 @@ export function WeatherCard(): React.JSX.Element {
               </p>
             </div>
             <div className="text-right">
-              <span className="text-slate-400">Est. 24h Yield:</span>
+              <span className="text-slate-400">Forecast Yield:</span>
               <p
                 data-testid="esa-daily-yield"
                 className="text-sm font-semibold text-white"
@@ -175,8 +175,17 @@ export function WeatherCard(): React.JSX.Element {
             </div>
           </div>
 
+          {/*
+            Deliberately not phrased as a percentage "of nominal capacity": nominal is anchored to a
+            25 °C / 90 % RH bench measurement Mediterranean air never reaches, so a healthy unit
+            reads far below it. Worded as equipment performance, a correct 30 % looked like a fault.
+          */}
           <p className="mt-1.5 text-[10px] text-slate-400">
-            Operating at {esaProduction ? `${(esaProduction.efficiencyFactor * 100).toFixed(0)}%` : '--'} of nominal capacity under current conditions.
+            Ambient yield ratio{' '}
+            <span data-testid="esa-ambient-yield-ratio" className="font-semibold text-slate-300">
+              {esaProduction ? `${(esaProduction.ambientYieldRatio * 100).toFixed(0)}%` : '--'}
+            </span>
+            {' '}&bull; set by how much moisture the air holds, not by unit condition.
           </p>
         </div>
 

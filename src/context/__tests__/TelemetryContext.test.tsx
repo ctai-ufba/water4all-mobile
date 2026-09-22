@@ -129,8 +129,11 @@ describe('TelemetryContext Seam', () => {
       </TelemetryProvider>
     );
 
-    expect(screen.getByTestId('stored-volume')).toHaveTextContent('77.2');
-    expect(screen.getByTestId('autonomy-days')).toHaveTextContent('29.7');
+    // 28.5 rainwater + 1.1 ESA + 14.0 external + 26.5 blend = 70.1 m³. The ESA tank shrank to a
+    // kappa-consistent 1.6 m³ capacity, so its baseline volume fell with it.
+    expect(screen.getByTestId('stored-volume')).toHaveTextContent('70.1');
+    // 70.1 m³ against 2.6 m³/day of consumption
+    expect(screen.getByTestId('autonomy-days')).toHaveTextContent('27');
     expect(screen.getByTestId('blend-volume')).toHaveTextContent('26.5');
     expect(screen.getByTestId('is-breached')).toHaveTextContent('false');
     expect(screen.getByTestId('is-surplus')).toHaveTextContent('surplus');

@@ -21,8 +21,17 @@ import {
   CatchmentEstimateResult,
 } from '../types/weather';
 import { fetchFarmWeather } from '../services/weatherService';
-import { calculateESAWaterProduction } from '../domain/esaPhysicsEngine';
+import { calculateESAProductionFromSeries } from '../domain/esaPhysicsEngine';
 import { calculateCatchmentInflow } from '../domain/catchmentEngine';
+
+/**
+ * How often live weather is refetched while the app stays open.
+ *
+ * @remarks Open-Meteo updates its forecast roughly hourly and the request is free and key-less, so
+ * a quarter-hour poll keeps the reading current without meaningful cost. Without it a session left
+ * open all day would keep showing the hour it started, and the cache would silently go stale.
+ */
+export const WEATHER_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
  * Interface defining the WeatherContext shape and methods.
@@ -121,6 +130,18 @@ export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.E
     loadWeather();
   }, [loadWeather]);
 
+  // Keep the reading current on a long-lived session. A farm change re-runs loadWeather, which
+  // restarts this timer, so the two cannot drift apart.
+  useEffect(() => {
+    if (!activeFarm) {
+      return;
+    }
+    const intervalId = setInterval(() => {
+      loadWeather();
+    }, WEATHER_REFRESH_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeFarm, loadWeather]);
+
   // Effective weather prioritizes scenario overrides when active
   const effectiveWeather = customWeather ?? weather;
 
@@ -129,8 +150,8 @@ export function WeatherProvider({ children }: WeatherProviderProps): React.JSX.E
     if (!activeFarm || !effectiveWeather) {
       return null;
     }
-    return calculateESAWaterProduction(
-      effectiveWeather,
+    return calculateESAProductionFromSeries(
+      effectiveWeather.hourly,
       activeFarm.esaNominalCapacityM3PerDay
     );
   }, [activeFarm, effectiveWeather]);

@@ -19,11 +19,13 @@ import {
   AdvanceSimulationParams,
   SOURCE_TANK_PUMP_RESERVE_RATIO,
   OPTIMIZATION_PHASES,
+  OPTIMAL_FARM_PARAMETERS,
+  UNOPTIMIZED_BASELINES,
 } from '../demoEngine';
 import { calculateCatchmentInflow } from '../catchmentEngine';
 import { calculateBlendQuality } from '../waterQualityEngine';
 import { evaluateCropCompliance } from '../faoComplianceEngine';
-import { FARM_PROFILES } from '../../types/farm';
+import { FARM_PROFILES, PROFILE_SCALE_FACTOR } from '../../types/farm';
 import {
   BASELINE_TELEMETRY,
   TankVolumeMetrics,
@@ -110,7 +112,24 @@ describe('Demo Engine Domain Logic', () => {
       const flows = getScenarioFlows('salinity', smallBaseline.flows, smallFarm);
       expect(flows.externalInflow).toBeGreaterThanOrEqual(2.5);
       expect(flows.rainwaterInflow).toBe(0);
-      expect(flows.esaInflow).toBe(0.2);
+      // ESA is derived from the scenario's own 24 °C / 60 % RH air, so it can never exceed what
+      // the installed capacity could make under those conditions.
+      expect(flows.esaInflow).toBeGreaterThan(0);
+      expect(flows.esaInflow).toBeLessThan(smallFarm.esaNominalCapacityM3PerDay);
+    });
+
+    it('withholds ESA production entirely in the drought scenario', () => {
+      const flows = getScenarioFlows('drought', smallBaseline.flows, smallFarm);
+      // At 38.5 °C and 18 % RH the cycle gate holds: the unit collects nothing at all. A
+      // multiplier on the baseline would have shown a small positive yield instead.
+      expect(flows.esaInflow).toBe(0);
+    });
+
+    it('keeps every scenario ESA inflow within installed capacity', () => {
+      for (const scenario of ['drought', 'storm', 'salinity'] as const) {
+        const flows = getScenarioFlows(scenario, smallBaseline.flows, smallFarm);
+        expect(flows.esaInflow).toBeLessThanOrEqual(smallFarm.esaNominalCapacityM3PerDay);
+      }
     });
 
     it('returns untouched baseline flows in live mode', () => {
@@ -176,7 +195,7 @@ describe('Demo Engine Domain Logic', () => {
       const opt = getOptimizedTelemetry(smallFarm);
       expect(opt.volumes.blend).toBe(smallFarm.tankCapacities.targetVolume); // 28.0 m³
       expect(opt.volumes.rainwater).toBe(36.0); // 80% capacity
-      expect(opt.volumes.esa).toBe(9.6);       // 80% capacity
+      expect(opt.volumes.esa).toBe(1.28);      // 80% of the 1.6 m³ capacity
       expect(opt.volumes.external).toBe(5.0);
       expect(opt.cumulativeTruckCost).toBe(0);
       expect(opt.irrigationMode).toBe('eco');
@@ -186,7 +205,7 @@ describe('Demo Engine Domain Logic', () => {
       const opt = getOptimizedTelemetry(mediumFarm);
       expect(opt.volumes.blend).toBe(mediumFarm.tankCapacities.targetVolume); // 65.0 m³
       expect(opt.volumes.rainwater).toBe(96.0); // 80% capacity
-      expect(opt.volumes.esa).toBe(24.0);       // 80% capacity
+      expect(opt.volumes.esa).toBe(3.76);       // 80% capacity
       expect(opt.cumulativeTruckCost).toBe(0);
       expect(opt.irrigationMode).toBe('eco');
     });
@@ -194,28 +213,42 @@ describe('Demo Engine Domain Logic', () => {
 
   describe('Temporal Simulation Step', () => {
     it('advances 6 hours integrating inflows into sources and draining Blend tank', () => {
+      // The ESA tank holds 1.6 m³ after the kappa rescale, so the starting volume has to sit
+      // inside it or the inflow simply clamps and the arithmetic below proves nothing.
       const initialVolumes = {
         rainwater: 20.0,
-        esa: 6.0,
+        esa: 1.0,
         external: 10.0,
         blend: 25.0,
+      };
+
+      // Flows are stated here rather than read from the baseline: this test pins the simulation
+      // arithmetic, and reading derived inflows would let a climate or physics change silently
+      // invalidate the worked example below.
+      const flows = {
+        rainwaterInflow: 2.4,
+        esaInflow: 1.2,
+        externalInflow: 0.0,
+        irrigationDemand: 2.1,
+        humanUtilityDemand: 0.5,
+        livestockDemand: 0.0,
       };
 
       const updated = simulateTimeStep(
         6,
         initialVolumes,
-        smallBaseline.flows,
+        flows,
         smallFarm.tankCapacities
       );
 
       // Rainwater inflow = 2.4 * (6/24) = 0.6 m³ -> rainwater accumulates to 20.6 m³
-      // ESA inflow = 1.2 * (6/24) = 0.3 m³ -> esa accumulates to 6.3 m³
+      // ESA inflow = 1.2 * (6/24) = 0.3 m³ -> esa accumulates to 1.3 m³, inside its 1.6 m³ tank
       // External inflow = 0 -> external remains 10.0 m³
       // Consumption = (2.1 + 0.5) * (6/24) = 2.6 * 0.25 = 0.65 m³ -> blend drains to 24.35 m³
       // Replenishment towards the 28.0 m³ target over 6h = (28.0 - 24.35) * 0.5 = 1.825 m³,
       // drawn from Rainwater, which holds 16.1 m³ above its 4.5 m³ reserve floor.
       expect(updated.rainwater).toBe(18.78); // 20.6 - 1.825
-      expect(updated.esa).toBe(6.3); // Untouched: Rainwater covered the whole transfer
+      expect(updated.esa).toBe(1.3); // Untouched: Rainwater covered the whole transfer
       expect(updated.external).toBe(10.0);
       expect(updated.blend).toBe(26.18); // 24.35 + 1.825
     });
@@ -254,12 +287,13 @@ describe('Demo Engine Domain Logic', () => {
     });
 
     it('will not pump a source tank below its reserve floor to top up the Blend tank', () => {
-      // Rainwater sits at 4.0 m³, under its 4.5 m³ floor (10% of 45 m³), ESA at 1.0 m³ under
-      // its 1.2 m³ floor, and external supply at 1.0 m³ under its 2.0 m³ floor. None can give
-      // anything up, however far the Blend tank is from its target volume.
+      // Rainwater sits at 4.0 m³, under its 4.5 m³ floor (10% of 45 m³), ESA at 0.1 m³ under
+      // its 0.16 m³ floor (10% of the kappa-scaled 1.6 m³ tank), and external supply at 1.0 m³
+      // under its 2.0 m³ floor. None can give anything up, however far the Blend tank is from
+      // its target volume.
       const depletedSources = {
         rainwater: 4.0,
-        esa: 1.0,
+        esa: 0.1,
         external: 1.0,
         blend: 10.0,
       };
@@ -276,7 +310,7 @@ describe('Demo Engine Domain Logic', () => {
       const updated = simulateTimeStep(6, depletedSources, noFlow, smallFarm.tankCapacities);
 
       expect(updated.rainwater).toBe(4.0);
-      expect(updated.esa).toBe(1.0);
+      expect(updated.esa).toBe(0.1);
       expect(updated.external).toBe(1.0);
       expect(updated.blend).toBe(10.0);
     });
@@ -531,7 +565,9 @@ describe('Demo Engine Domain Logic', () => {
       const result = simulateTimeStep(6, volumes, smallBaseline.flows, capacities);
 
       expect(result.rainwater).toBeLessThan(volumes.rainwater);
-      expect(result.external).toBe(volumes.external);
+      // The optimal configuration buys external water on a plan, so the tank may rise; what must
+      // not happen is it being drawn down while local sources still have water to give.
+      expect(result.external).toBeGreaterThanOrEqual(volumes.external);
     });
 
     it('holds external supply at its reserve floor rather than emptying the tank', () => {
@@ -683,6 +719,113 @@ describe('Demo Engine Domain Logic', () => {
             BASELINE_TELEMETRY[farm.id].flows.irrigationDemand
           );
         });
+      });
+    }
+  });
+});
+
+describe('Profile scale and derived optimal flows', () => {
+  describe('kappa = 1/10 profile rescale (ADR 0004)', () => {
+    it('holds cultivated area at one tenth of the prototype preset', () => {
+      // Prototype Small sums to 1.84 ha and Medium to 4.6 ha (app.py:184-222).
+      expect(FARM_PROFILES['small-farm'].areaHa).toBeCloseTo(1.84 * PROFILE_SCALE_FACTOR, 4);
+      expect(FARM_PROFILES['medium-farm'].areaHa).toBeCloseTo(4.6 * PROFILE_SCALE_FACTOR, 4);
+    });
+
+    it('holds ESA nominal capacity at one tenth of the prototype esa_output', () => {
+      // These were the quantities out of line: ESA previously sat at 0.22x, not 0.10x.
+      expect(FARM_PROFILES['small-farm'].esaNominalCapacityM3PerDay).toBeCloseTo(
+        5.5 * PROFILE_SCALE_FACTOR, 4
+      );
+      expect(FARM_PROFILES['medium-farm'].esaNominalCapacityM3PerDay).toBeCloseTo(
+        15.8 * PROFILE_SCALE_FACTOR, 4
+      );
+    });
+
+    it('leaves catchment area ungoverned by kappa, at about a fifth of the scaled plot', () => {
+      for (const farm of [FARM_PROFILES['small-farm'], FARM_PROFILES['medium-farm']]) {
+        const plotM2 = farm.areaHa * 10_000;
+        expect(farm.catchmentAreaM2 / plotM2).toBeGreaterThan(0.15);
+        expect(farm.catchmentAreaM2 / plotM2).toBeLessThan(0.25);
+      }
+    });
+  });
+
+  describe('optimal flows derived from the engines', () => {
+    /** A snapshot may omit flows in general; the optimal parameters never do. */
+    function requireOptimalFlows(farmId: 'small-farm' | 'medium-farm'): WaterFlowMetrics {
+      const flows = OPTIMAL_FARM_PARAMETERS[farmId].flows;
+      if (!flows) {
+        throw new Error(`Optimal parameters for ${farmId} must declare flows.`);
+      }
+      return flows;
+    }
+
+    for (const farmId of ['small-farm', 'medium-farm'] as const) {
+      const farm = FARM_PROFILES[farmId];
+      const flows = requireOptimalFlows(farmId);
+
+      it(`keeps ${farmId} ESA inflow below its nominal capacity`, () => {
+        // The old hardcoded 1.4 and 3.2 m³/day exceeded even the pre-rescale nominals.
+        expect(flows.esaInflow).toBeGreaterThan(0);
+        expect(flows.esaInflow).toBeLessThan(farm.esaNominalCapacityM3PerDay);
+      });
+
+      it(`realises roughly 40% of ${farmId} nominal capacity, as dry Mediterranean air allows`, () => {
+        const ambientYieldRatio = flows.esaInflow / farm.esaNominalCapacityM3PerDay;
+        expect(ambientYieldRatio).toBeGreaterThan(0.3);
+        expect(ambientYieldRatio).toBeLessThan(0.6);
+      });
+
+      it(`derives ${farmId} rainwater inflow from a plausible Mediterranean daily rainfall`, () => {
+        // Inverting the catchment formula must land near the 1.3 mm/day regional mean, not the
+        // 7.4 mm/day the previous hardcoded figure implied.
+        const impliedDailyRainMm =
+          (flows.rainwaterInflow * 1000) / (farm.catchmentAreaM2 * 0.855);
+        expect(impliedDailyRainMm).toBeGreaterThan(0.8);
+        expect(impliedDailyRainMm).toBeLessThan(2.0);
+      });
+
+      it(`reports the energy ${farmId} ESA production drew`, () => {
+        expect(flows.esaEnergyKwhPerDay).toBeGreaterThan(0);
+      });
+
+      it(`keeps every ${farmId} shipped ESA inflow within installed capacity`, () => {
+        // The guard against the defect that reopened this ticket. Written as literals, these
+        // figures drifted past what the hardware can make: the baseline the app booted into
+        // claimed 1.2 m³/day against a 0.55 m³/day nominal. Nothing may state an ESA inflow it
+        // could not produce, in any of the three shipped states.
+        const shipped = [
+          ['baseline', BASELINE_TELEMETRY[farmId].flows.esaInflow],
+          ['optimal', OPTIMAL_FARM_PARAMETERS[farmId].flows?.esaInflow],
+          ['unoptimized', UNOPTIMIZED_BASELINES[farmId].flows?.esaInflow],
+        ] as const;
+
+        for (const [label, esaInflow] of shipped) {
+          expect(esaInflow, `${label} ESA inflow`).toBeDefined();
+          expect(esaInflow as number, `${label} ESA inflow`).toBeGreaterThanOrEqual(0);
+          expect(esaInflow as number, `${label} ESA inflow`).toBeLessThanOrEqual(
+            farm.esaNominalCapacityM3PerDay
+          );
+        }
+      });
+
+      it(`sizes the ${farmId} ESA tank against what the unit can actually make`, () => {
+        // A tank holding months of production is a sign the capacity was never reconciled with
+        // the physics; this one held six weeks before the kappa correction.
+        const daysOfProduction = farm.tankCapacities.esa / flows.esaInflow;
+        expect(daysOfProduction).toBeGreaterThan(3);
+        expect(daysOfProduction).toBeLessThan(14);
+      });
+
+      it(`closes the ${farmId} balance with external supply rather than pretending to autonomy`, () => {
+        const demand = flows.irrigationDemand + flows.humanUtilityDemand + flows.livestockDemand;
+        const local = flows.rainwaterInflow + flows.esaInflow;
+
+        // Local sources cover only part of demand at this scale, exactly as the prototype's own
+        // presets do; the optimal configuration buys the remainder cheaply and plans for it.
+        expect(local).toBeLessThan(demand);
+        expect(flows.rainwaterInflow + flows.esaInflow + flows.externalInflow).toBeGreaterThan(demand);
       });
     }
   });

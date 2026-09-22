@@ -118,39 +118,84 @@ describe('Telemetry Domain Engine Seam', () => {
   });
 
   describe('calculateWaterEfficiency', () => {
-    it('computes percentage of demand met by local sources (rainwater + esa) and saved euros', () => {
-      // Local inflow = 3.0 m³/day, Total demand = 3.0 m³/day -> 100%
-      // 3.0 m³ * 4.50 €/m³ = 13.50 €
-      const result = calculateWaterEfficiency(3.0, 3.0, EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3);
-      expect(result.localPercentage).toBe(100);
+    it('computes the share of demand met by local sources', () => {
+      const result = calculateWaterEfficiency({ localInflow: 2.0, totalDemand: 4.0 });
+      expect(result.localPercentage).toBe(50);
+    });
+
+    it('caps local percentage at 100% when local inflow exceeds demand', () => {
+      expect(calculateWaterEfficiency({ localInflow: 5.0, totalDemand: 2.5 }).localPercentage).toBe(100);
+    });
+
+    it('credits avoided truck purchases only for water that actually replaced demand', () => {
+      // Local inflow 5.0 m3/day against 2.5 m3/day of demand: only 2.5 m3 displaces a purchase.
+      // 2.5 m3 * 4.50 EUR/m3 = 11.25 EUR
+      const result = calculateWaterEfficiency({ localInflow: 5.0, totalDemand: 2.5 });
+      expect(result.avoidedTruckCostEur).toBeCloseTo(11.25, 2);
+    });
+
+    it('charges ESA production for the electricity it draws', () => {
+      // 0.2 m3/day of ESA water at the bench specific energy of 4640 kWh/m3 draws 928 kWh/day,
+      // which at 0.17 EUR/kWh costs 157.76 EUR/day.
+      const result = calculateWaterEfficiency({
+        localInflow: 3.0,
+        totalDemand: 3.0,
+        esaInflow: 0.2,
+      });
+
+      expect(result.avoidedTruckCostEur).toBeCloseTo(13.5, 2);
+      expect(result.esaEnergyCostEur).toBeCloseTo(157.76, 2);
+    });
+
+    it('reports net savings as avoided purchases less the energy drawn', () => {
+      const result = calculateWaterEfficiency({
+        localInflow: 3.0,
+        totalDemand: 3.0,
+        esaInflow: 0.2,
+      });
+
+      // ESA water is the most expensive water on the farm, so crediting it at the truck price
+      // with no production cost presented a large loss as a saving.
+      expect(result.dailySavingsEur).toBeCloseTo(13.5 - 157.76, 2);
+      expect(result.dailySavingsEur).toBeLessThan(0);
+    });
+
+    it('prefers a simulated energy draw over the bench specific energy when one is supplied', () => {
+      // The ESA engine reports the energy its cycles actually drew; 1474.76 kWh/day at
+      // 0.17 EUR/kWh is 250.71 EUR/day, well above the bench-derived estimate.
+      const result = calculateWaterEfficiency({
+        localInflow: 3.0,
+        totalDemand: 3.0,
+        esaInflow: 0.2,
+        esaEnergyKwhPerDay: 1474.76,
+      });
+
+      expect(result.esaEnergyCostEur).toBeCloseTo(250.71, 2);
+      expect(result.dailySavingsEur).toBeCloseTo(13.5 - 250.71, 2);
+    });
+
+    it('charges nothing for energy when the farm runs no ESA production', () => {
+      const result = calculateWaterEfficiency({
+        localInflow: 3.0,
+        totalDemand: 3.0,
+        esaInflow: 0,
+        costPerM3: EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3,
+      });
+
+      expect(result.esaEnergyCostEur).toBe(0);
       expect(result.dailySavingsEur).toBeCloseTo(13.5, 2);
     });
 
-    it('caps local percentage at 100% and bounds savings to actual demand when local inflow exceeds demand', () => {
-      // Local inflow = 5.0 m³/day, Demand = 2.5 m³/day -> 100%
-      // Replaced water = 2.5 m³ * 4.50 €/m³ = 11.25 €
-      const result = calculateWaterEfficiency(5.0, 2.5);
+    it('handles zero demand with positive local inflow yielding 100% and no avoided cost', () => {
+      const result = calculateWaterEfficiency({ localInflow: 1.0, totalDemand: 0 });
       expect(result.localPercentage).toBe(100);
-      expect(result.dailySavingsEur).toBeCloseTo(11.25, 2);
+      expect(result.avoidedTruckCostEur).toBe(0);
     });
 
-    it('calculates partial local coverage correctly', () => {
-      // Local = 2.0 m³, Demand = 4.0 m³ -> 50%
-      // Replaced water = 2.0 m³ * 4.50 €/m³ = 9.00 €
-      const result = calculateWaterEfficiency(2.0, 4.0);
-      expect(result.localPercentage).toBe(50);
-      expect(result.dailySavingsEur).toBeCloseTo(9.0, 2);
-    });
-
-    it('handles zero demand with positive local inflow yielding 100% and zero avoided savings', () => {
-      const result = calculateWaterEfficiency(1.0, 0);
-      expect(result.localPercentage).toBe(100);
-      expect(result.dailySavingsEur).toBe(0);
-    });
-
-    it('handles zero demand with zero local inflow yielding 0% and zero avoided savings', () => {
-      const result = calculateWaterEfficiency(0, 0);
+    it('handles zero demand with zero local inflow yielding 0% and no avoided cost', () => {
+      const result = calculateWaterEfficiency({ localInflow: 0, totalDemand: 0 });
       expect(result.localPercentage).toBe(0);
+      expect(result.avoidedTruckCostEur).toBe(0);
       expect(result.dailySavingsEur).toBe(0);
     });
   });
@@ -184,7 +229,11 @@ describe('Telemetry Domain Engine Seam', () => {
       expect(telemetry.waterAutonomyDays).toBeGreaterThan(15);
       expect(telemetry.isSurplus).toBe(true);
       expect(telemetry.localWaterPercentage).toBeGreaterThan(0);
-      expect(telemetry.dailySavingsEur).toBeGreaterThan(0);
+      expect(telemetry.avoidedTruckCostEur).toBeGreaterThan(0);
+      // Net savings run negative because ESA electricity outweighs the truck water it displaces.
+      // The card reports all three lines so the loss is attributable rather than mysterious.
+      expect(telemetry.esaEnergyCostEur).toBeGreaterThan(telemetry.avoidedTruckCostEur);
+      expect(telemetry.dailySavingsEur).toBeLessThan(0);
     });
 
     it('initializes baseline telemetry for Medium Farm (Heraklion)', () => {

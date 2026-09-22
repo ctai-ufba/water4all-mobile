@@ -1,14 +1,17 @@
 /**
  * @file WaterEfficiencyCard.tsx
- * @summary Dashboard card displaying local water efficiency and daily euro savings.
+ * @summary Dashboard card displaying local water efficiency and the daily euro balance.
  * @description Renders the percentage of farm demand met by sustainable local sources
- * (Rainwater catchment + ESA atmospheric water generator) and the estimated daily financial
- * savings achieved compared to purchasing water from external truck deliveries.
+ * (Rainwater catchment + ESA atmospheric water generator), then the daily financial result as
+ * three lines: truck purchases avoided, electricity drawn producing ESA water, and the net.
  */
 
 import React from 'react';
-import { Leaf, Euro, Sparkles } from 'lucide-react';
-import { EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3 } from '../../types/telemetry';
+import { Leaf, Euro, Sparkles, Zap } from 'lucide-react';
+import {
+  EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3,
+  ELECTRICITY_PRICE_EUR_PER_KWH,
+} from '../../types/telemetry';
 
 /**
  * Props for the WaterEfficiencyCard component.
@@ -16,8 +19,12 @@ import { EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3 } from '../../types/telemetry';
 export interface WaterEfficiencyCardProps {
   /** Percentage of demand met by local sources (0 to 100%) */
   localPercentage: number;
-  /** Estimated daily savings in EUR compared to external deliveries */
+  /** Net daily financial effect in EUR: avoided purchases less ESA electricity */
   dailySavingsEur: number;
+  /** External truck purchases avoided by local water, in EUR/day */
+  avoidedTruckCostEur: number;
+  /** Electricity drawn producing ESA water, in EUR/day */
+  esaEnergyCostEur: number;
 }
 
 /**
@@ -25,16 +32,19 @@ export interface WaterEfficiencyCardProps {
  *
  * @summary Water efficiency and savings card.
  * @description Quantifies the environmental and economic value of on-site water harvesting,
- * presenting local water share and euros saved per day.
+ * presenting the local water share and the day's financial balance broken into its two causes.
  *
- * @param props - Component props containing localPercentage and dailySavingsEur.
+ * @param props - Local share plus the avoided-cost, energy-cost and net savings figures.
  * @returns React.JSX.Element representing the water efficiency card.
  * @throws Never throws.
  */
 export function WaterEfficiencyCard({
   localPercentage,
   dailySavingsEur,
+  avoidedTruckCostEur,
+  esaEnergyCostEur,
 }: WaterEfficiencyCardProps): React.JSX.Element {
+  const isNetLoss = dailySavingsEur < 0;
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl">
       <div className="flex items-center justify-between">
@@ -74,14 +84,51 @@ export function WaterEfficiencyCard({
         <div className="rounded-xl bg-slate-950/60 p-3 ring-1 ring-slate-800/80">
           <div className="flex items-center space-x-1 text-slate-400 text-xs">
             <Euro className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
-            <span>Daily Avoided Cost</span>
+            <span>Net Daily Result</span>
           </div>
-          <p className="mt-1 text-2xl font-extrabold text-cyan-400">
+          <p
+            data-testid="water-efficiency-net"
+            className={`mt-1 text-2xl font-extrabold ${isNetLoss ? 'text-amber-400' : 'text-cyan-400'}`}
+          >
             €{dailySavingsEur.toFixed(2)}
           </p>
           <p className="mt-1 text-[11px] text-slate-400">
-            vs. truck deliveries
+            water saved less energy
           </p>
+        </div>
+      </div>
+
+      {/*
+        Shown as three lines rather than one net figure. ESA water costs on the order of 790 EUR/m³
+        in electricity against 4.50 EUR/m³ delivered, so the net is normally negative; a lone red
+        number would say nothing about why. Split, the card attributes it.
+      */}
+      <div className="mt-3 space-y-1.5 rounded-xl bg-slate-950/40 p-3 text-xs ring-1 ring-slate-800/60">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center space-x-1.5 text-slate-400">
+            <Leaf className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+            <span>Truck water avoided</span>
+          </span>
+          <span data-testid="water-efficiency-avoided" className="font-semibold text-emerald-400">
+            +€{avoidedTruckCostEur.toFixed(2)}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="flex items-center space-x-1.5 text-slate-400">
+            <Zap className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+            <span>ESA energy cost</span>
+          </span>
+          <span data-testid="water-efficiency-energy" className="font-semibold text-amber-400">
+            −€{esaEnergyCostEur.toFixed(2)}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-800/80 pt-1.5">
+          <span className="font-semibold text-slate-300">Net per day</span>
+          <span className={`font-bold ${isNetLoss ? 'text-amber-400' : 'text-emerald-400'}`}>
+            €{dailySavingsEur.toFixed(2)}
+          </span>
         </div>
       </div>
 
@@ -100,7 +147,9 @@ export function WaterEfficiencyCard({
       </div>
 
       <p className="mt-3 text-[11px] text-slate-500 text-center">
-        Estimated savings based on standard {EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3.toFixed(2)} €/m³ truck delivery rate.
+        Truck delivery {EXTERNAL_WATER_TRUCK_COST_EUR_PER_M3.toFixed(2)} €/m³, electricity{' '}
+        {ELECTRICITY_PRICE_EUR_PER_KWH.toFixed(2)} €/kWh. ESA earns its place through autonomy where
+        no truck reaches, not through price.
       </p>
     </div>
   );

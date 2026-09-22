@@ -23,6 +23,11 @@ describe('WeatherCard Component Seam', () => {
     precipitationForecast24hMm: 8.0,
     isOfflineFallback: false,
     timestamp: '2026-09-20T14:00:00Z',
+    hourly: {
+      temperatureC: new Array(168).fill(24.5),
+      relativeHumidityPct: new Array(168).fill(62),
+      startTime: '2026-09-20T14:00:00Z',
+    },
   };
 
   const mockEsaProduction: ESAProductionResult = {
@@ -31,7 +36,10 @@ describe('WeatherCard Component Seam', () => {
     dailyRateM3: 1.02,
     adsorptionPotentialJPerMol: 1180.5,
     equilibriumLoadingKgPerKg: 0.185,
-    efficiencyFactor: 0.85,
+    ambientYieldRatio: 0.85,
+    cyclesPerDay: 2.71,
+    energyKwhPerDay: 1474.76,
+    integratedDays: 7,
   };
 
   const mockCatchmentEstimate: CatchmentEstimateResult = {

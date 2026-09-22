@@ -1,20 +1,37 @@
 /**
  * @file esaPhysicsEngine.ts
  * @summary Physics calculation engine for ESA (Electric Swing Adsorption) atmospheric water generation.
- * @description Implements Dubinin-Astakhov adsorption isotherms, temperature-dependent adsorption
- * potentials, condenser enthalpy limitations, and installed capacity scaling based on the
- * physical ACFF prototype model from prototipo_water4all.
+ * @description Implements Dubinin-Astakhov adsorption isotherms, linear-driving-force sorption
+ * kinetics, gated adsorption/desorption cycling, condenser enthalpy limits, and installed capacity
+ * scaling, ported from the physical ACFF prototype model in prototipo_water4all
+ * (`src/h2o_farm/physics/esa.py`).
+ *
+ * @remarks Production is integrated across an hourly forecast series rather than extrapolated from
+ * a single instantaneous reading. Read at a summer afternoon peak, an instantaneous reading reports
+ * zero, correctly for that instant and wrongly for the day, because the daily total is collected in
+ * the humid pre-dawn window (ADR 0003).
  */
 
 import {
   AmbientConditions,
+  HourlyAmbientSeries,
   ESAPhysicalParameters,
   DEFAULT_ESA_PARAMETERS,
   ESAProductionResult,
+  BENCH_WATER_KG_PER_CYCLE,
 } from '../types/weather';
 
 /** Universal gas constant in Joules per mole Kelvin (J/(mol*K)) */
 export const GAS_CONSTANT_J_PER_MOL_K = 8.314462618;
+
+/**
+ * Forecast horizon used when answering what a single steady ambient condition would yield.
+ *
+ * @remarks A cycle spans 8.5 h, so a 24-hour window fits only two whole cycles and truncates the
+ * third, under-reporting the steady-state rate by roughly a quarter. Seven days amortises that
+ * edge effect to within a few percent of the asymptote.
+ */
+export const STEADY_STATE_HORIZON_DAYS = 7;
 
 /**
  * Calculates the Polanyi adsorption potential for water vapor in air.
@@ -62,10 +79,7 @@ export function calculateEquilibriumLoading(
   precomputedPotential?: number
 ): number {
   // Use precomputed potential if provided to avoid duplicate logarithmic evaluation
-  const potential =
-    precomputedPotential !== undefined
-      ? precomputedPotential
-      : calculateAdsorptionPotential(conditions);
+  const potential = precomputedPotential ?? calculateAdsorptionPotential(conditions);
 
   // Dubinin-Astakhov isotherm calculation
   const safeEnergy = Math.max(params.characteristicEnergyJPerMol, 1e-12);
@@ -75,74 +89,256 @@ export function calculateEquilibriumLoading(
 }
 
 /**
- * Calculates live water production rates for an installed ESA atmospheric water generator.
+ * Builds an hourly series holding one ambient condition constant.
  *
- * @summary Calculate ESA water production rates.
- * @description Determines water collected per cycle accounting for sorbent mass, desorption recovery,
- * condenser thermal capacity limit, and scales by the farm profile's nominal installed capacity.
+ * @summary Build a constant ambient series.
+ * @description Repeats a single temperature and relative humidity across whole days, for answering
+ * what a steady regime would yield. Used by demo scenario overrides, which supply one condition
+ * rather than a forecast.
  *
- * @param conditions - Ambient atmospheric conditions (dry-bulb temperature and relative humidity).
- * @param nominalCapacityM3PerDay - Nominal rated capacity of installed farm system in m³/day.
+ * @param conditions - The ambient condition to hold constant.
+ * @param days - Whole days to span (defaults to STEADY_STATE_HORIZON_DAYS).
+ * @param startTime - ISO 8601 timestamp of the first sample (defaults to now).
+ * @returns An HourlyAmbientSeries of `days * 24` identical samples.
+ * @throws Never throws; a non-positive day count yields an empty series.
+ */
+export function buildConstantAmbientSeries(
+  conditions: AmbientConditions,
+  days: number = STEADY_STATE_HORIZON_DAYS,
+  startTime: string = new Date().toISOString()
+): HourlyAmbientSeries {
+  const hours = Math.max(0, Math.floor(days)) * 24;
+  return {
+    temperatureC: new Array(hours).fill(conditions.temperatureC),
+    relativeHumidityPct: new Array(hours).fill(conditions.relativeHumidityPct),
+    startTime,
+  };
+}
+
+/** One completed adsorption/desorption cycle of a single ACFF module. */
+interface ESACycleResult {
+  /** Water condensed and collected over the cycle, in kg */
+  collectedWaterKg: number;
+  /** Electrical energy drawn by the cycle, in kWh */
+  energyKwh: number;
+}
+
+/**
+ * Simulates one sequential ACFF sorbent bed against an hourly climate series.
+ *
+ * @summary Simulate a single ACFF module.
+ * @description Advances sorbent loading toward the Dubinin-Astakhov equilibrium using
+ * linear-driving-force kinetics on a sub-hourly step, then desorbs once the adsorption stage has
+ * run its course *and* the bed holds enough water to be worth regenerating.
+ *
+ * @param series - Hourly ambient temperature and relative humidity.
+ * @param params - Calibrated physical ESA parameters.
+ * @returns The cycles completed within the series window.
+ * @throws Error if stage durations or the integration step are not positive.
+ */
+function simulateAcffModule(
+  series: HourlyAmbientSeries,
+  params: ESAPhysicalParameters
+): ESACycleResult[] {
+  const dt = params.integrationStepHours;
+  if (dt <= 0 || params.adsorptionHours <= 0 || params.desorptionHours <= 0) {
+    throw new Error('ESA stage durations and integration step must be positive.');
+  }
+
+  const hours = Math.min(series.temperatureC.length, series.relativeHumidityPct.length);
+  const cycles: ESACycleResult[] = [];
+
+  // Condenser thermal ceiling is fixed by the desorption stage, so it is hoisted out of the loop.
+  const condenserLimitKg =
+    (params.condenserCop * params.condenserPowerKw * params.desorptionHours) /
+    params.waterLatentHeatKwhPerKg;
+
+  let elapsed = 0.0;
+  let loading = params.residualLoadingKgPerKg;
+  let adsorptionElapsed = 0.0;
+
+  while (elapsed + dt <= hours + 1e-9) {
+    // The climate series is hourly while the physics steps at a finer interval, so each sub-hourly
+    // step reads the hour it falls within.
+    const index = Math.min(Math.floor(elapsed), hours - 1);
+    const equilibrium = calculateEquilibriumLoading(
+      {
+        temperatureC: series.temperatureC[index],
+        relativeHumidityPct: series.relativeHumidityPct[index],
+      },
+      params
+    );
+
+    // Linear driving force: loading relaxes toward equilibrium at a finite rate rather than
+    // snapping to it, so a brief humid window does not fill the bed instantly.
+    loading = equilibrium - (equilibrium - loading) * Math.exp(-params.ldfRatePerHour * dt);
+    loading = Math.min(params.qMaxKgPerKg, Math.max(params.residualLoadingKgPerKg, loading));
+
+    elapsed += dt;
+    adsorptionElapsed += dt;
+
+    const potentialCollectionKg =
+      params.sorbentMassKg *
+      Math.max(0.0, loading - params.residualLoadingKgPerKg) *
+      params.desorptionEfficiency *
+      params.collectionEfficiency;
+
+    const stageComplete = adsorptionElapsed + 1e-9 >= params.adsorptionHours;
+
+    // The cycle gate. Desorption draws a fixed regeneration charge whatever it recovers, so in dry
+    // air the bed keeps adsorbing instead of spending a full cycle on a nearly empty bed.
+    if (!stageComplete || potentialCollectionKg < params.minimumCollectionKg) {
+      continue;
+    }
+
+    // Only cycles that can finish desorbing inside the forecast window are counted.
+    if (elapsed + params.desorptionHours > hours + 1e-9) {
+      break;
+    }
+
+    const releasableKg =
+      params.sorbentMassKg * Math.max(0.0, loading - params.residualLoadingKgPerKg);
+    const desorbedKg = releasableKg * params.desorptionEfficiency;
+    const collectedKg = Math.min(desorbedKg * params.collectionEfficiency, condenserLimitKg);
+
+    // Energy splits into a charge drawn regardless of yield and a charge scaling with water
+    // recovered, both referenced to the bench cycle.
+    const energyScale =
+      params.energyFixedFraction +
+      (params.energyWaterFraction * collectedKg) / BENCH_WATER_KG_PER_CYCLE;
+    const energyKwh = params.referenceCycleEnergyKwh * Math.max(0.0, energyScale);
+
+    cycles.push({ collectedWaterKg: collectedKg, energyKwh });
+
+    elapsed += params.desorptionHours;
+    loading = (params.sorbentMassKg * loading - desorbedKg) / params.sorbentMassKg;
+    adsorptionElapsed = 0.0;
+  }
+
+  return cycles;
+}
+
+/** Rounds to a fixed number of decimal places. */
+function roundTo(value: number, decimals: number): number {
+  const factor = Math.pow(10, decimals);
+  return Math.round(value * factor) / factor;
+}
+
+/** The result returned when there is nothing to integrate. */
+function emptyProductionResult(
+  conditions: AmbientConditions | null,
+  params: ESAPhysicalParameters
+): ESAProductionResult {
+  const potential = conditions ? calculateAdsorptionPotential(conditions) : 0;
+  const loading = conditions ? calculateEquilibriumLoading(conditions, params, potential) : 0;
+  return {
+    hourlyRateLiters: 0,
+    hourlyRateM3: 0,
+    dailyRateM3: 0,
+    adsorptionPotentialJPerMol: roundTo(potential, 1),
+    equilibriumLoadingKgPerKg: roundTo(loading, 4),
+    ambientYieldRatio: 0,
+    cyclesPerDay: 0,
+    energyKwhPerDay: 0,
+    integratedDays: 0,
+  };
+}
+
+/**
+ * Integrates ESA water production across an hourly ambient forecast.
+ *
+ * @summary Calculate ESA production over a forecast series.
+ * @description Simulates one ACFF module against the series, scales it by the module count the
+ * farm's nominal capacity implies, and normalises water, energy and cycle counts to a daily rate.
+ *
+ * @param series - Hourly ambient temperature and relative humidity forecast.
+ * @param nominalCapacityM3PerDay - Nominal rated capacity of the installed farm system in m³/day.
  * @param params - Calibrated physical ESA parameters (defaults to DEFAULT_ESA_PARAMETERS).
- * @returns ESAProductionResult containing hourly and daily production rates, loading, and efficiency.
- * @throws Error if temperature is below absolute zero.
+ * @returns ESAProductionResult with daily water, energy, cycle count and ambient yield ratio.
+ * @throws Error if a sampled temperature is at or below absolute zero.
+ *
+ * @remarks Diagnostic fields (`adsorptionPotentialJPerMol`, `equilibriumLoadingKgPerKg`) report the
+ * first sample of the series, so they line up with the instantaneous reading the weather card
+ * displays; the production figures come from the whole series.
+ */
+export function calculateESAProductionFromSeries(
+  series: HourlyAmbientSeries,
+  nominalCapacityM3PerDay: number,
+  params: ESAPhysicalParameters = DEFAULT_ESA_PARAMETERS
+): ESAProductionResult {
+  const hours = Math.min(series.temperatureC.length, series.relativeHumidityPct.length);
+  const safeNominal = Math.max(0, nominalCapacityM3PerDay);
+
+  const firstSample: AmbientConditions | null =
+    hours > 0
+      ? {
+          temperatureC: series.temperatureC[0],
+          relativeHumidityPct: series.relativeHumidityPct[0],
+        }
+      : null;
+
+  if (hours === 0 || safeNominal === 0) {
+    return emptyProductionResult(firstSample, params);
+  }
+
+  // Installed module count follows from the bench-anchored reference output (ADR 0003).
+  const moduleCount = (safeNominal * 1000.0) / Math.max(params.referenceOutputKgPerDay, 1e-12);
+  const cycles = simulateAcffModule(series, params);
+
+  const dayEquivalents = hours / 24.0;
+  const totalWaterKg =
+    cycles.reduce((sum, cycle) => sum + cycle.collectedWaterKg, 0) * moduleCount;
+  const totalEnergyKwh = cycles.reduce((sum, cycle) => sum + cycle.energyKwh, 0) * moduleCount;
+
+  const dailyRateM3 = totalWaterKg / 1000.0 / dayEquivalents;
+  const hourlyRateKg = totalWaterKg / hours;
+
+  const potential = calculateAdsorptionPotential(firstSample as AmbientConditions);
+  const loading = calculateEquilibriumLoading(
+    firstSample as AmbientConditions,
+    params,
+    potential
+  );
+
+  return {
+    hourlyRateLiters: roundTo(hourlyRateKg, 1),
+    hourlyRateM3: roundTo(hourlyRateKg / 1000.0, 4),
+    dailyRateM3: roundTo(dailyRateM3, 4),
+    adsorptionPotentialJPerMol: roundTo(potential, 1),
+    equilibriumLoadingKgPerKg: roundTo(loading, 4),
+    ambientYieldRatio: roundTo(dailyRateM3 / safeNominal, 4),
+    cyclesPerDay: roundTo(cycles.length / dayEquivalents, 4),
+    energyKwhPerDay: roundTo(totalEnergyKwh / dayEquivalents, 2),
+    integratedDays: Math.floor(dayEquivalents),
+  };
+}
+
+/**
+ * Calculates what a single steady ambient condition would yield.
+ *
+ * @summary Calculate ESA production for a held condition.
+ * @description Holds one temperature and relative humidity across a multi-day horizon and
+ * integrates, answering "what if it stayed like this". Demo scenario overrides supply a single
+ * condition rather than a forecast, and this is their entry point.
+ *
+ * @param conditions - Ambient atmospheric conditions to hold constant.
+ * @param nominalCapacityM3PerDay - Nominal rated capacity of the installed farm system in m³/day.
+ * @param params - Calibrated physical ESA parameters (defaults to DEFAULT_ESA_PARAMETERS).
+ * @returns ESAProductionResult for the steady regime.
+ * @throws Error if temperature is at or below absolute zero.
+ *
+ * @remarks This is not the right entry point for a real forecast. A held afternoon reading reports
+ * zero for a day that does produce, which is the defect ADR 0003 records; pass the hourly series to
+ * `calculateESAProductionFromSeries` instead.
  */
 export function calculateESAWaterProduction(
   conditions: AmbientConditions,
   nominalCapacityM3PerDay: number,
   params: ESAPhysicalParameters = DEFAULT_ESA_PARAMETERS
 ): ESAProductionResult {
-  // Ensure non-negative capacity
-  const safeNominal = Math.max(0, nominalCapacityM3PerDay);
-
-  // 1. Calculate thermodynamics and equilibrium loading (reusing precomputed potential)
-  const adsorptionPotential = calculateAdsorptionPotential(conditions);
-  const equilibriumLoading = calculateEquilibriumLoading(
-    conditions,
-    params,
-    adsorptionPotential
+  return calculateESAProductionFromSeries(
+    buildConstantAmbientSeries(conditions, STEADY_STATE_HORIZON_DAYS),
+    nominalCapacityM3PerDay,
+    params
   );
-
-  // 2. Desorption water release per single module
-  const releasableWaterKg = params.sorbentMassKg * equilibriumLoading;
-  const desorbedWaterKg = releasableWaterKg * params.desorptionEfficiency;
-
-  // 3. Condenser thermal limit (COP * CondenserPower * DesorptionHours / LatentHeat)
-  const condenserLimitKg =
-    (params.condenserCop * params.condenserPowerKw * params.desorptionHours) /
-    params.waterLatentHeatKwhPerKg;
-
-  // 4. Actual water collected per cycle per single module
-  const collectedPerCycleKg = Math.min(
-    desorbedWaterKg * params.collectionEfficiency,
-    condenserLimitKg
-  );
-
-  // 5. Daily output per module based on cycle duration (adsorption + desorption hours)
-  const cycleHours = params.adsorptionHours + params.desorptionHours;
-  const cyclesPerDay = 24.0 / cycleHours;
-  const moduleDailyOutputKg = collectedPerCycleKg * cyclesPerDay;
-
-  // 6. Installed module scaling based on nominal rated capacity
-  const moduleCount =
-    safeNominal > 0 ? (safeNominal * 1000.0) / Math.max(params.referenceOutputKgPerDay, 1e-12) : 0;
-
-  // 7. System totals (compute unrounded hourly rate directly to preserve precision)
-  const totalDailyKg = moduleCount * moduleDailyOutputKg;
-  const dailyRateM3 = Math.round((totalDailyKg / 1000.0) * 100) / 100;
-  const hourlyRateKg = totalDailyKg / 24.0;
-  const hourlyRateLiters = Math.round(hourlyRateKg * 10) / 10;
-  const hourlyRateM3 = Math.round((hourlyRateKg / 1000.0) * 1000) / 1000;
-  const efficiencyFactor =
-    safeNominal > 0 ? Math.round((dailyRateM3 / safeNominal) * 100) / 100 : 0;
-
-  return {
-    hourlyRateLiters,
-    hourlyRateM3,
-    dailyRateM3,
-    adsorptionPotentialJPerMol: Math.round(adsorptionPotential * 10) / 10,
-    equilibriumLoadingKgPerKg: Math.round(equilibriumLoading * 10000) / 10000,
-    efficiencyFactor,
-  };
 }
-

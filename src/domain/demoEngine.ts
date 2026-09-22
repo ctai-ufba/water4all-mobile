@@ -19,7 +19,11 @@ import { calculateCatchmentInflow } from './catchmentEngine';
 import { WeatherData } from '../types/weather';
 import { roundTo2Decimals } from './telemetryEngine';
 import { generateSyntheticWeather } from './syntheticWeatherEngine';
-import { calculateESAWaterProduction } from './esaPhysicsEngine';
+import {
+  buildConstantAmbientSeries,
+  calculateESAProductionFromSeries,
+} from './esaPhysicsEngine';
+import { deriveAnnualMeanSupply } from './farmSupplyDerivation';
 
 /**
  * Supported simulation scenario identifiers for live demonstrations.
@@ -118,6 +122,94 @@ const MEDIUM_FARM_CALIBRATED_SCHEDULE = getFarmBaseline('medium-farm').flows.irr
 const SMALL_FARM_UNOPTIMIZED_SCHEDULE = 3.6;
 const MEDIUM_FARM_UNOPTIMIZED_SCHEDULE = 9.5;
 
+/** Days of steady scenario weather handed to the ESA engine. */
+const SCENARIO_HORIZON_DAYS = 7;
+
+/**
+ * Builds the optimal flow set for a farm from the physics and catchment engines.
+ *
+ * @summary Derive optimal operating flows.
+ * @description Takes ESA production and rainwater catchment from the engines, then sizes external
+ * supply to close whatever gap remains against demand, plus a small reserve margin.
+ *
+ * @param farmId - Farm to derive flows for.
+ * @param scheduledIrrigation - The farm's calibrated irrigation schedule in m³/day.
+ * @param humanUtilityDemand - Domestic and utility demand in m³/day.
+ * @param livestockDemand - Livestock demand in m³/day.
+ * @returns The derived WaterFlowMetrics for the optimal configuration.
+ * @throws Never throws.
+ *
+ * @remarks Local sources cover roughly a quarter of demand at this scale, so a zero-deficit
+ * configuration needs external supply. The prototype sizes its own presets the same way: ESA is
+ * deliberately undersized there too, supplying 12-15 % of mean demand. What separates this from
+ * the unoptimized baseline is not the absence of purchased water but that the purchase is planned
+ * and cheap rather than an emergency truck call.
+ */
+function deriveOptimalFlows(
+  farmId: FarmId,
+  scheduledIrrigation: number,
+  humanUtilityDemand: number,
+  livestockDemand: number
+): WaterFlowMetrics {
+  const supply = deriveAnnualMeanSupply(farmId);
+  const irrigationDemand = calculateIrrigationDemand(scheduledIrrigation, 'eco');
+
+  const totalDemand = irrigationDemand + humanUtilityDemand + livestockDemand;
+  const localInflow = supply.rainwaterInflowM3PerDay + supply.esaInflowM3PerDay;
+  const externalInflow = Math.max(
+    0,
+    roundTo2Decimals(totalDemand * (1 + OPTIMAL_SURPLUS_FRACTION) - localInflow)
+  );
+
+  return {
+    rainwaterInflow: supply.rainwaterInflowM3PerDay,
+    esaInflow: supply.esaInflowM3PerDay,
+    esaEnergyKwhPerDay: supply.esaEnergyKwhPerDay,
+    externalInflow,
+    irrigationDemand,
+    humanUtilityDemand,
+    livestockDemand,
+  };
+}
+
+/** Surplus the optimal configuration holds over demand, as a fraction of total daily demand. */
+const OPTIMAL_SURPLUS_FRACTION = 0.05;
+
+/**
+ * The fraction of derivable ESA output a neglected unit still manages.
+ *
+ * @remarks The unoptimized baseline is a badly run farm, not different physics, so its ESA inflow
+ * is expressed against what the farm could derive rather than stated as its own literal.
+ */
+const UNOPTIMIZED_ESA_DEGRADATION = 0.45;
+
+/** The fraction of harvestable rainwater a neglected catchment still captures. */
+const UNOPTIMIZED_CATCHMENT_DEGRADATION = 0.35;
+
+/**
+ * Builds the degraded inflows of the unoptimized baseline from what the farm could derive.
+ *
+ * @param farmId - Farm to degrade.
+ * @returns The rainwater, ESA and ESA energy figures a neglected farm achieves.
+ * @throws Never throws for a known farm id.
+ */
+function deriveUnoptimizedInflows(farmId: FarmId): {
+  rainwaterInflow: number;
+  esaInflow: number;
+  esaEnergyKwhPerDay: number;
+} {
+  const supply = deriveAnnualMeanSupply(farmId);
+  return {
+    rainwaterInflow: roundTo2Decimals(
+      supply.rainwaterInflowM3PerDay * UNOPTIMIZED_CATCHMENT_DEGRADATION
+    ),
+    esaInflow: roundTo2Decimals(supply.esaInflowM3PerDay * UNOPTIMIZED_ESA_DEGRADATION),
+    // A neglected unit still pays the fixed regeneration charge on every cycle it runs, so its
+    // energy does not fall in step with its yield.
+    esaEnergyKwhPerDay: supply.esaEnergyKwhPerDay,
+  };
+}
+
 /**
  * Pre-computed optimal parameters adhering to ADR 0002 for Mediterranean farm profiles.
  */
@@ -125,18 +217,11 @@ export const OPTIMAL_FARM_PARAMETERS: Record<FarmId, TelemetrySnapshot> = {
   'small-farm': {
     volumes: {
       rainwater: 36.0, // 80% capacity buffer (45 m³)
-      esa: 9.6,        // 80% capacity buffer (12 m³)
+      esa: 1.28,       // 80% capacity buffer (1.6 m³)
       external: 5.0,   // Minimal external reliance (20 m³)
       blend: 28.0,     // Exact target volume (35 m³ capacity, min 7 m³, 0 deficit)
     },
-    flows: {
-      rainwaterInflow: 2.8,
-      esaInflow: 1.4,
-      externalInflow: 0.0,
-      irrigationDemand: calculateIrrigationDemand(SMALL_FARM_CALIBRATED_SCHEDULE, 'eco'),
-      humanUtilityDemand: 0.5,
-      livestockDemand: 0.0,
-    },
+    flows: deriveOptimalFlows('small-farm', SMALL_FARM_CALIBRATED_SCHEDULE, 0.5, 0.0),
     cumulativeTruckCost: 0.0,
     irrigationMode: 'eco',
     scheduledIrrigationDemand: SMALL_FARM_CALIBRATED_SCHEDULE,
@@ -144,18 +229,11 @@ export const OPTIMAL_FARM_PARAMETERS: Record<FarmId, TelemetrySnapshot> = {
   'medium-farm': {
     volumes: {
       rainwater: 96.0, // 80% capacity buffer (120 m³)
-      esa: 24.0,       // 80% capacity buffer (30 m³)
+      esa: 3.76,       // 80% capacity buffer (4.7 m³)
       external: 15.0,  // Minimal buffer (60 m³)
       blend: 65.0,     // Exact target volume (80 m³ capacity, min 16 m³, 0 deficit)
     },
-    flows: {
-      rainwaterInflow: 5.2,
-      esaInflow: 3.2,
-      externalInflow: 0.5,
-      irrigationDemand: calculateIrrigationDemand(MEDIUM_FARM_CALIBRATED_SCHEDULE, 'eco'),
-      humanUtilityDemand: 0.8,
-      livestockDemand: 1.4,
-    },
+    flows: deriveOptimalFlows('medium-farm', MEDIUM_FARM_CALIBRATED_SCHEDULE, 0.8, 1.4),
     cumulativeTruckCost: 0.0,
     irrigationMode: 'eco',
     scheduledIrrigationDemand: MEDIUM_FARM_CALIBRATED_SCHEDULE,
@@ -179,13 +257,12 @@ export const UNOPTIMIZED_BASELINES: Record<FarmId, TelemetrySnapshot> = {
   'small-farm': {
     volumes: {
       rainwater: 0.3, // Poor catchment upkeep, below the 4.5 m³ pump reserve floor
-      esa: 0.2,       // Badly run ESA unit, below its 1.2 m³ floor
+      esa: 0.05,      // Badly run ESA unit, below its 0.16 m³ floor
       external: 2.0,  // Purchased water already spent, down to its 2.0 m³ floor
       blend: 5.5,     // Breaches min operating volume (7.0 m³) -> 1.5 m³ deficit!
     },
     flows: {
-      rainwaterInflow: 0.5,
-      esaInflow: 0.6,
+      ...deriveUnoptimizedInflows('small-farm'),
       externalInflow: 1.2,
       irrigationDemand: calculateIrrigationDemand(SMALL_FARM_UNOPTIMIZED_SCHEDULE, 'auto'),
       humanUtilityDemand: 0.5,
@@ -198,13 +275,12 @@ export const UNOPTIMIZED_BASELINES: Record<FarmId, TelemetrySnapshot> = {
   'medium-farm': {
     volumes: {
       rainwater: 0.6, // Poor catchment upkeep, below the 12.0 m³ pump reserve floor
-      esa: 0.4,       // Badly run ESA unit, below its 3.0 m³ floor
+      esa: 0.15,      // Badly run ESA unit, below its 0.47 m³ floor
       external: 6.0,  // Purchased water already spent, down to its 6.0 m³ floor
       blend: 12.0,    // Breaches min operating volume (16.0 m³) -> 4.0 m³ deficit!
     },
     flows: {
-      rainwaterInflow: 1.0,
-      esaInflow: 1.2,
+      ...deriveUnoptimizedInflows('medium-farm'),
       externalInflow: 2.5,
       irrigationDemand: calculateIrrigationDemand(MEDIUM_FARM_UNOPTIMIZED_SCHEDULE, 'auto'),
       humanUtilityDemand: 0.8,
@@ -237,36 +313,36 @@ export function getScenarioWeather(
 ): WeatherData | null {
   const timestamp = baseDate.toISOString();
 
+  // A scenario states one ambient condition and asserts it holds. Handing the ESA engine a series
+  // that repeats it keeps every consumer on the single integrated code path.
+  const scenarioWeather = (
+    temperatureC: number,
+    relativeHumidityPct: number,
+    currentPrecipitationMm: number,
+    precipitationForecast24hMm: number
+  ): WeatherData => ({
+    temperatureC,
+    relativeHumidityPct,
+    currentPrecipitationMm,
+    precipitationForecast24hMm,
+    isOfflineFallback: true,
+    timestamp,
+    hourly: buildConstantAmbientSeries(
+      { temperatureC, relativeHumidityPct },
+      SCENARIO_HORIZON_DAYS,
+      timestamp
+    ),
+  });
+
   switch (scenario) {
     case 'drought':
-      return {
-        temperatureC: 38.5,
-        relativeHumidityPct: 18,
-        currentPrecipitationMm: 0,
-        precipitationForecast24hMm: 0,
-        isOfflineFallback: true,
-        timestamp,
-      };
+      return scenarioWeather(38.5, 18, 0, 0);
 
     case 'storm':
-      return {
-        temperatureC: 17.5,
-        relativeHumidityPct: 95,
-        currentPrecipitationMm: 8.5,
-        precipitationForecast24hMm: 48.0,
-        isOfflineFallback: true,
-        timestamp,
-      };
+      return scenarioWeather(17.5, 95, 8.5, 48.0);
 
     case 'salinity':
-      return {
-        temperatureC: 24.0,
-        relativeHumidityPct: 60,
-        currentPrecipitationMm: 0,
-        precipitationForecast24hMm: 0,
-        isOfflineFallback: true,
-        timestamp,
-      };
+      return scenarioWeather(24.0, 60, 0, 0);
 
     case 'live':
     default:
@@ -339,6 +415,39 @@ function getScenarioRainwaterInflow(
 }
 
 /**
+ * Derives a scenario's ESA inflow from its own stated ambient conditions.
+ *
+ * @summary Derive scenario ESA inflow.
+ * @description Runs the scenario's weather through the physics engine rather than scaling the
+ * baseline by a chosen multiplier, so each scenario shows what its air would actually yield.
+ *
+ * @param scenario - Active demonstration scenario.
+ * @param farm - Farm profile supplying nominal capacity.
+ * @returns The scenario's ESA inflow and energy draw, or nothing to override for 'live'.
+ * @throws Never throws.
+ *
+ * @remarks This is what makes the drought scenario honest: at 38.5 °C and 18 % RH the cycle gate
+ * holds and the unit produces nothing at all, which a 0.35x multiplier on the baseline concealed.
+ */
+function deriveScenarioEsaInflow(
+  scenario: DemoScenarioId,
+  farm: FarmProfile
+): Partial<Pick<WaterFlowMetrics, 'esaInflow' | 'esaEnergyKwhPerDay'>> {
+  const weather = getScenarioWeather(scenario);
+  if (!weather) {
+    return {};
+  }
+  const production = calculateESAProductionFromSeries(
+    weather.hourly,
+    farm.esaNominalCapacityM3PerDay
+  );
+  return {
+    esaInflow: roundTo2Decimals(production.dailyRateM3),
+    esaEnergyKwhPerDay: production.energyKwhPerDay,
+  };
+}
+
+/**
  * Computes water flow rates adjusted according to the active demonstration scenario.
  *
  * @summary Calculate scenario water flows.
@@ -367,28 +476,30 @@ export function getScenarioFlows(
     baseFlows.rainwaterInflow
   );
 
+  const esa = deriveScenarioEsaInflow(scenario, farm);
+
   switch (scenario) {
     case 'drought':
       return {
         ...baseFlows,
+        ...esa,
         rainwaterInflow,
-        esaInflow: roundTo2Decimals(baseFlows.esaInflow * 0.35),
         irrigationDemand: roundTo2Decimals(baseFlows.irrigationDemand * 1.5),
       };
 
     case 'storm':
       return {
         ...baseFlows,
+        ...esa,
         rainwaterInflow,
-        esaInflow: roundTo2Decimals(baseFlows.esaInflow * 1.25),
         irrigationDemand: roundTo2Decimals(baseFlows.irrigationDemand * 0.4),
       };
 
     case 'salinity':
       return {
         ...baseFlows,
+        ...esa,
         rainwaterInflow,
-        esaInflow: 0.2,
         externalInflow: roundTo2Decimals(Math.max(2.5, baseFlows.externalInflow * 2.0)),
       };
 
@@ -721,9 +832,9 @@ export function advanceSimulation(params: AdvanceSimulationParams): SimulationSt
 
   if (scenario === 'live') {
     // Generate diurnal synthetic weather matching the new solar hour
-    effectiveWeather = generateSyntheticWeather(newDate);
-    const diurnalEsa = calculateESAWaterProduction(
-      effectiveWeather,
+    effectiveWeather = generateSyntheticWeather(newDate, farm.id);
+    const diurnalEsa = calculateESAProductionFromSeries(
+      effectiveWeather.hourly,
       farm.esaNominalCapacityM3PerDay
     );
 
@@ -736,6 +847,7 @@ export function advanceSimulation(params: AdvanceSimulationParams): SimulationSt
     modulatedFlows = {
       ...diurnalDemands,
       esaInflow: roundTo2Decimals(diurnalEsa.dailyRateM3),
+      esaEnergyKwhPerDay: diurnalEsa.energyKwhPerDay,
       rainwaterInflow: currentFlows.rainwaterInflow,
       externalInflow: currentFlows.externalInflow,
     };

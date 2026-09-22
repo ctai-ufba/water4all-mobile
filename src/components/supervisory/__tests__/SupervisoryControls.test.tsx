@@ -40,6 +40,8 @@ describe('Supervisory Controls Components', () => {
     isSurplus: true,
     localWaterPercentage: 100,
     dailySavingsEur: 11.7,
+    avoidedTruckCostEur: 11.70,
+    esaEnergyCostEur: 0,
     isBelowMinOperatingVolume: false,
     blendDeficitM3: 0,
     irrigationMode: 'auto',

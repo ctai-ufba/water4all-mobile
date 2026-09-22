@@ -40,7 +40,9 @@ describe('DashboardView Seam', () => {
     netBalance: 1.0,
     isSurplus: true,
     localWaterPercentage: 100,
-    dailySavingsEur: 11.7,
+    dailySavingsEur: -145.06,
+    avoidedTruckCostEur: 11.70,
+    esaEnergyCostEur: 156.76,
     isBelowMinOperatingVolume: false,
     blendDeficitM3: 0,
     irrigationMode: 'auto',
@@ -68,6 +70,8 @@ describe('DashboardView Seam', () => {
     isSurplus: false,
     localWaterPercentage: 55,
     dailySavingsEur: 16.2,
+    avoidedTruckCostEur: 16.20,
+    esaEnergyCostEur: 0,
   };
 
   beforeEach(() => {
@@ -80,6 +84,11 @@ describe('DashboardView Seam', () => {
         precipitationForecast24hMm: 2.0,
         isOfflineFallback: false,
         timestamp: '2026-09-20T12:00:00Z',
+        hourly: {
+          temperatureC: new Array(168).fill(22.0),
+          relativeHumidityPct: new Array(168).fill(60),
+          startTime: '2026-09-20T12:00:00Z',
+        },
       },
       loading: false,
       esaProduction: {
@@ -88,7 +97,10 @@ describe('DashboardView Seam', () => {
         dailyRateM3: 0.96,
         adsorptionPotentialJPerMol: 1200,
         equilibriumLoadingKgPerKg: 0.15,
-        efficiencyFactor: 0.8,
+        ambientYieldRatio: 0.8,
+        cyclesPerDay: 2.71,
+        energyKwhPerDay: 1474.76,
+        integratedDays: 7,
       },
       catchmentEstimate: {
         catchmentAreaM2: 380,
@@ -285,7 +297,7 @@ describe('DashboardView Seam', () => {
     expect(screen.getByText(/Deficit/i)).toBeInTheDocument();
   });
 
-  it('renders Water Efficiency & Savings card with local percentage and estimated daily euros saved', () => {
+  it('renders Water Efficiency & Savings card as avoided cost, energy cost and net', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       activeFarm: mockFarm,
       isAuthenticated: true,
@@ -310,6 +322,10 @@ describe('DashboardView Seam', () => {
 
     expect(screen.getByText(/Water Efficiency & Savings/i)).toBeInTheDocument();
     expect(screen.getAllByText(/100%/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/€11.70/i)).toBeInTheDocument();
+
+    // All three lines are shown, so a negative net is attributable rather than mysterious.
+    expect(screen.getByTestId('water-efficiency-avoided')).toHaveTextContent('11.70');
+    expect(screen.getByTestId('water-efficiency-energy')).toHaveTextContent('156.76');
+    expect(screen.getByTestId('water-efficiency-net')).toHaveTextContent('-145.06');
   });
 });

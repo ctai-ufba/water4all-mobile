@@ -39,6 +39,8 @@ describe('TanksView Component', () => {
     isSurplus: true,
     localWaterPercentage: 100,
     dailySavingsEur: 11.7,
+    avoidedTruckCostEur: 11.70,
+    esaEnergyCostEur: 0,
     isBelowMinOperatingVolume: false,
     blendDeficitM3: 0,
     irrigationMode: 'auto',
@@ -49,7 +51,7 @@ describe('TanksView Component', () => {
     ...normalTelemetry,
     tankVolumes: {
       rainwater: 0, // Depleted (0 m³)
-      esa: 1.0, // Critically low (< 15% of 12.0 m³)
+      esa: 0.2, // Critically low (< 15% of the kappa-scaled 1.6 m³ tank)
       external: 14.0,
       blend: 26.5,
     },
@@ -105,9 +107,9 @@ describe('TanksView Component', () => {
     expect(screen.getByText(/Tanks & Sources/i)).toBeInTheDocument();
     expect(screen.getByText(/Total Farm Storage/i)).toBeInTheDocument();
 
-    // Small farm baseline total capacity is 45 + 12 + 20 + 35 = 112.0 m³
+    // Small farm baseline total capacity is 45 + 1.6 + 20 + 35 = 101.6 m³
     expect(screen.getByText(/77.2 m³/i)).toBeInTheDocument();
-    expect(screen.getByText(/\/ 112.0 m³ capacity/i)).toBeInTheDocument();
+    expect(screen.getByText(/\/ 101.6 m³ capacity/i)).toBeInTheDocument();
   });
 
   it('renders all four core farm tanks with volume, capacity, and fill percentage', () => {
@@ -133,7 +135,7 @@ describe('TanksView Component', () => {
     // 2. ESA tank
     expect(screen.getByText(/ESA Atmospheric Generator/i)).toBeInTheDocument();
     expect(screen.getByText(/8.2 m³/i)).toBeInTheDocument();
-    expect(screen.getByText(/\/ 12.0 m³/i)).toBeInTheDocument();
+    expect(screen.getByText(/\/ 1.6 m³/i)).toBeInTheDocument();
 
     // 3. External supply tank
     expect(screen.getByText(/External Water Supply/i)).toBeInTheDocument();

@@ -68,9 +68,24 @@ export interface FarmProfile {
 }
 
 /**
+ * The ratio by which each profile is reduced from its `prototipo_water4all` preset.
+ *
+ * @remarks Governs every quantity with prototype lineage: cultivated area, ESA nominal capacity,
+ * tank capacities and daily demand. It does **not** govern `catchmentAreaM2`, which has no
+ * counterpart in the prototype (ADR 0004).
+ *
+ * The tank capacities and demands below already sat at roughly this ratio, which is why adopting
+ * it preserves the demo calibration; area and ESA capacity were the two quantities out of line.
+ */
+export const PROFILE_SCALE_FACTOR = 1 / 10;
+
+/**
  * Pre-calibrated Mediterranean farm profiles.
- * Small Farm: Finca El Olivar in Antequera, Andalusia, Spain (~1.84 ha, olive groves, vineyards).
- * Medium Farm: Ktima Helios in Heraklion, Crete, Greece (~4.6 ha, mixed farming, livestock, vegetables).
+ *
+ * Small Farm: Finca El Olivar in Antequera, Andalusia, Spain, the prototype's Small case at
+ * kappa = 1/10 (0.184 ha, olive groves, vineyards).
+ * Medium Farm: Ktima Helios in Heraklion, Crete, Greece, the prototype's Medium case at the same
+ * ratio (0.46 ha, mixed farming, livestock, vegetables).
  */
 export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
   'small-farm': {
@@ -82,13 +97,19 @@ export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
       latitude: 37.0194,
       longitude: -4.5612,
     },
-    areaHa: 1.84,
+    // Prototype Small case: 1.84 ha of olives, vineyards, vegetables, pasture and fruit trees.
+    areaHa: 0.184,
+    // Ungoverned by kappa: roof collection area, about a fifth of the scaled plot (ADR 0004).
     catchmentAreaM2: 380.0,
-    esaNominalCapacityM3PerDay: 1.2,
+    // Prototype Small case: esa_output 5.5 m³/day (app.py:184-203).
+    esaNominalCapacityM3PerDay: 0.55,
     crops: ['Olive trees', 'Vineyards'],
     tankCapacities: {
       rainwater: 45.0,
-      esa: 12.0,
+      // Prototype Small case: esa_storage_capacity_m3 16.0 (app.py:194). This was the one tank
+      // that sat nowhere near kappa (0.75x), and at 12 m³ held six weeks of what the unit can
+      // actually make.
+      esa: 1.6,
       external: 20.0,
       blend: 35.0,
       targetVolume: 28.0,
@@ -105,13 +126,17 @@ export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
       latitude: 35.3387,
       longitude: 25.1442,
     },
-    areaHa: 4.6,
+    // Prototype Medium case: 4.6 ha across olives, vineyards, vegetables, pasture and fruit.
+    areaHa: 0.46,
+    // Ungoverned by kappa: greenhouse collection area, about a fifth of the scaled plot (ADR 0004).
     catchmentAreaM2: 950.0,
-    esaNominalCapacityM3PerDay: 2.8,
+    // Prototype Medium case: esa_output 15.8 m³/day (app.py:203-222).
+    esaNominalCapacityM3PerDay: 1.58,
     crops: ['Olive trees', 'Vineyards', 'Greenhouse vegetables', 'Livestock'],
     tankCapacities: {
       rainwater: 120.0,
-      esa: 30.0,
+      // Prototype Medium case: esa_storage_capacity_m3 47.0 (app.py:214), previously 0.64x.
+      esa: 4.7,
       external: 60.0,
       blend: 80.0,
       targetVolume: 65.0,

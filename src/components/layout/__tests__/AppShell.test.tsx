@@ -114,4 +114,34 @@ describe('AppShell Seam', () => {
 
     expect(openDrawerMock).toHaveBeenCalledTimes(1);
   });
+
+  describe('Open-Meteo attribution', () => {
+    it('renders the CC BY 4.0 attribution with links to both the source and the licence', () => {
+      render(
+        <AppShell>
+          <div data-testid="dashboard-content">Dashboard Content</div>
+        </AppShell>
+      );
+
+      const source = screen.getByRole('link', { name: /Open-Meteo\.com/i });
+      expect(source).toHaveAttribute('href', 'https://open-meteo.com/');
+
+      const licence = screen.getByRole('link', { name: /CC BY 4\.0/i });
+      expect(licence).toHaveAttribute('href', 'https://creativecommons.org/licenses/by/4.0/');
+    });
+
+    it('keeps the attribution visible on every tab', () => {
+      render(
+        <AppShell>
+          <div data-testid="dashboard-content">Dashboard Content</div>
+        </AppShell>
+      );
+
+      // The licence covers the data the app is built on, so it cannot be a dashboard-only credit.
+      for (const tab of ['Weather', 'Tanks', 'Quality', 'Dashboard']) {
+        fireEvent.click(screen.getByRole('button', { name: tab }));
+        expect(screen.getByRole('link', { name: /Open-Meteo\.com/i })).toBeInTheDocument();
+      }
+    });
+  });
 });
