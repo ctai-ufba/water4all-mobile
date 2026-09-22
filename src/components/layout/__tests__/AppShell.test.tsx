@@ -44,6 +44,7 @@ describe('AppShell Seam', () => {
     vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
       scenario: 'live',
       isUnoptimizedBaseline: false,
+      qualityRegime: 'balanced',
       simulatedDate: new Date(),
       elapsedSimulatedHours: 0,
       isDrawerOpen: false,

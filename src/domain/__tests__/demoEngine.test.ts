@@ -671,16 +671,11 @@ describe('Demo Engine Domain Logic', () => {
           const { rainwater, esa, external } = unopt.volumes;
           expect(external / (rainwater + esa + external)).toBeGreaterThan(0.7);
 
-          const unoptimizedQuality = calculateBlendQuality(unopt.volumes);
+          // An unoptimized farm is living off emergency deliveries, which is the stressed supply.
+          const unoptimizedQuality = calculateBlendQuality(unopt.volumes, 'stressed');
           const calibratedQuality = calculateBlendQuality(BASELINE_TELEMETRY[farm.id].volumes);
           expect(unoptimizedQuality.ec).toBeGreaterThan(calibratedQuality.ec * 2);
-
-          // Not asserted here: that this fails FAO crop compliance. It does not, and neither
-          // does the High Salinity scenario, because SOURCE_WATER_QUALITIES.external sits at
-          // EC 720 µS/cm, barely over the 700 threshold where FAO restrictions begin. Every
-          // mix the app can reach still evaluates 'safe'. Tracked as its own defect rather
-          // than papered over with a weaker threshold here.
-          expect(evaluateCropCompliance('vegetables', unoptimizedQuality).status).toBe('safe');
+          expect(evaluateCropCompliance('vegetables', unoptimizedQuality).status).not.toBe('safe');
         });
 
         it('over-irrigates well beyond the profile calibration', () => {

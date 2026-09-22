@@ -7,7 +7,11 @@
  */
 
 import { TankVolumeMetrics } from '../types/telemetry';
-import { WaterQualityMetrics, SOURCE_WATER_QUALITIES } from '../types/quality';
+import {
+  WaterQualityMetrics,
+  WaterQualityRegime,
+  SOURCE_WATER_QUALITY_PROFILES,
+} from '../types/quality';
 
 /**
  * Converts a pH value to its corresponding hydrogen ion molar concentration [mol/L].
@@ -53,10 +57,16 @@ export function hydrogenIonConcentrationToPh(hPlus: number): number {
  * If total stored volume across sources is zero, falls back to a clean neutral standard.
  *
  * @param tankVolumes - Current water storage volumes across all four reservoirs in m³.
+ * @param regime - Water quality regime the farm's supply is in. Defaults to 'balanced', the
+ * ordinary supply; 'stressed' is the saltier one the High Salinity scenario and a farm living off
+ * emergency deliveries draw on.
  * @returns Composite WaterQualityMetrics representing the Blend tank water state.
  * @throws Never throws.
  */
-export function calculateBlendQuality(tankVolumes: TankVolumeMetrics): WaterQualityMetrics {
+export function calculateBlendQuality(
+  tankVolumes: TankVolumeMetrics,
+  regime: WaterQualityRegime = 'balanced'
+): WaterQualityMetrics {
   const { rainwater, esa, external } = tankVolumes;
   const totalVolume = rainwater + esa + external;
 
@@ -75,9 +85,10 @@ export function calculateBlendQuality(tankVolumes: TankVolumeMetrics): WaterQual
   const esaFraction = esa / totalVolume;
   const extFraction = external / totalVolume;
 
-  const rainQuality = SOURCE_WATER_QUALITIES.rainwater;
-  const esaQuality = SOURCE_WATER_QUALITIES.esa;
-  const externalQuality = SOURCE_WATER_QUALITIES.external;
+  const sources = SOURCE_WATER_QUALITY_PROFILES[regime];
+  const rainQuality = sources.rainwater;
+  const esaQuality = sources.esa;
+  const externalQuality = sources.external;
 
   // Linear volumetric mass-balance mixing for conservative solutes
   const mixedTds =
@@ -154,7 +165,7 @@ export function getNominalRangeDescription(metric: keyof WaterQualityMetrics): s
     case 'tds':
       return 'Nominal: < 500 mg/L (Freshwater)';
     case 'ph':
-      return 'Nominal: 6.0 - 8.5 (Neutral)';
+      return 'Nominal: 5.5 - 8.4 (Irrigation)';
     case 'nitrates':
       return 'Nominal: < 30 mg/L (Optimal)';
     case 'ec':
@@ -191,8 +202,10 @@ export function evaluateFreshwaterMetricStatus(
       if (value <= 1000) return 'caution';
       return 'unsafe';
     case 'ph':
-      if (value >= 6.0 && value <= 8.4) return 'safe';
-      if ((value >= 5.5 && value < 6.0) || (value > 8.4 && value <= 8.8)) return 'caution';
+      // Floor from prototipo_water4all's irrigation_ph_min. Rain-fed blends sit near 5.9, so a
+      // stricter floor marks the most sustainable farm as non-compliant.
+      if (value >= 5.5 && value <= 8.4) return 'safe';
+      if ((value >= 5.0 && value < 5.5) || (value > 8.4 && value <= 8.8)) return 'caution';
       return 'unsafe';
     case 'nitrates':
       if (value <= 30) return 'safe';

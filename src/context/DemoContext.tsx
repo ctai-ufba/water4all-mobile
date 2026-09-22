@@ -33,6 +33,7 @@ import {
   OPTIMIZATION_DURATION_MS,
 } from '../domain/demoEngine';
 import { getFarmBaseline, TankVolumeMetrics } from '../types/telemetry';
+import { WaterQualityRegime } from '../types/quality';
 
 /**
  * Interface defining the DemoContext shape and control methods.
@@ -42,6 +43,14 @@ export interface DemoContextType {
   scenario: DemoScenarioId;
   /** Whether the Unoptimized Baseline comparison mode is currently active */
   isUnoptimizedBaseline: boolean;
+  /**
+   * Water quality regime the farm's supply is currently in.
+   *
+   * @remarks Derived from the active demo state rather than stored, because it is a restatement
+   * of that state: a High Salinity scenario and a farm living off emergency deliveries are both
+   * drawing the stressed supply, and nothing else is.
+   */
+  qualityRegime: WaterQualityRegime;
   /** Current virtual simulation date and time */
   simulatedDate: Date;
   /** Total simulated hours elapsed since last reset */
@@ -421,10 +430,16 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     resetToBaseline();
   }, [resetInternalDemoState, resetToBaseline]);
 
+  // A High Salinity scenario and an unoptimized farm are the two states that run on the stressed
+  // external supply; every other state draws the ordinary balanced one.
+  const qualityRegime: WaterQualityRegime =
+    scenario === 'salinity' || isUnoptimizedBaseline ? 'stressed' : 'balanced';
+
   const contextValue = useMemo<DemoContextType>(
     () => ({
       scenario,
       isUnoptimizedBaseline,
+      qualityRegime,
       simulatedDate,
       elapsedSimulatedHours,
       isDrawerOpen,
@@ -443,6 +458,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     [
       scenario,
       isUnoptimizedBaseline,
+      qualityRegime,
       simulatedDate,
       elapsedSimulatedHours,
       isDrawerOpen,

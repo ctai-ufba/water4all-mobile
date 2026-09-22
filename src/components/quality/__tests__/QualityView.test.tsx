@@ -7,11 +7,13 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { QualityView } from '../QualityView';
 import { AuthProvider } from '../../../context/AuthContext';
 import { TelemetryProvider } from '../../../context/TelemetryContext';
+import { WeatherProvider } from '../../../context/WeatherContext';
+import { DemoProvider, useDemo } from '../../../context/DemoContext';
 
 import { STORAGE_KEY_ACTIVE_FARM } from '../../../context/AuthContext';
 
@@ -19,7 +21,8 @@ import { STORAGE_KEY_ACTIVE_FARM } from '../../../context/AuthContext';
  * Helper test utility rendering components within Auth and Telemetry providers.
  *
  * @summary Render with app providers.
- * @description Wraps the target UI component in AuthProvider and TelemetryProvider for integration testing.
+ * @description Wraps the target UI component in the provider stack App.tsx mounts, since the screen
+ * reads the active water quality regime from the demo state.
  *
  * @param ui - React element to render.
  * @returns RenderResult from testing-library.
@@ -28,9 +31,23 @@ import { STORAGE_KEY_ACTIVE_FARM } from '../../../context/AuthContext';
 function renderWithProviders(ui: React.ReactElement) {
   return render(
     <AuthProvider>
-      <TelemetryProvider>{ui}</TelemetryProvider>
+      <TelemetryProvider>
+        <WeatherProvider>
+          <DemoProvider>{ui}</DemoProvider>
+        </WeatherProvider>
+      </TelemetryProvider>
     </AuthProvider>
   );
+}
+
+/**
+ * Helper control that switches the demo into the High Salinity scenario.
+ *
+ * @returns React.JSX.Element with a single scenario button.
+ */
+function ScenarioSwitch(): React.JSX.Element {
+  const { selectScenario } = useDemo();
+  return <button onClick={() => selectScenario('salinity')}>Go Salinity</button>;
 }
 
 describe('QualityView Component Seam', () => {
@@ -108,5 +125,27 @@ describe('QualityView Component Seam', () => {
     // In 100% external supply, EC is 720 µS/cm which exceeds sensitive vegetable limit (700 µS/cm)
     const warningBanner = screen.queryByTestId('quality-warning-banner');
     expect(warningBanner).toBeInTheDocument();
+  });
+  describe('Stressed water supply', () => {
+    it('shows no warning banner while the farm draws its ordinary supply', () => {
+      renderWithProviders(<QualityView />);
+      expect(screen.queryByTestId('quality-warning-banner')).not.toBeInTheDocument();
+    });
+
+    it('warns once the High Salinity scenario puts the farm on the stressed supply', () => {
+      renderWithProviders(
+        <>
+          <ScenarioSwitch />
+          <QualityView />
+        </>
+      );
+
+      act(() => {
+        screen.getByRole('button', { name: 'Go Salinity' }).click();
+      });
+
+      // The scenario card promises FAO crop warnings; this is the screen that has to deliver them.
+      expect(screen.getByTestId('quality-warning-banner')).toBeInTheDocument();
+    });
   });
 });

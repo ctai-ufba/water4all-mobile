@@ -197,8 +197,8 @@ export const UNOPTIMIZED_BASELINES: Record<FarmId, TelemetrySnapshot> = {
   },
   'medium-farm': {
     volumes: {
-      rainwater: 1.2, // Poor catchment upkeep, below the 12.0 m³ pump reserve floor
-      esa: 0.8,       // Badly run ESA unit, below its 3.0 m³ floor
+      rainwater: 0.6, // Poor catchment upkeep, below the 12.0 m³ pump reserve floor
+      esa: 0.4,       // Badly run ESA unit, below its 3.0 m³ floor
       external: 6.0,  // Purchased water already spent, down to its 6.0 m³ floor
       blend: 12.0,    // Breaches min operating volume (16.0 m³) -> 4.0 m³ deficit!
     },

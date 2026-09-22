@@ -110,20 +110,20 @@ const EVALUATION_CONFIGS: Record<AgriculturalUseId, UseEvaluationConfig> = {
         label: 'pH Level',
         unit: '',
         evaluate: (val) => {
-          if (val >= 6.0 && val <= 8.4) {
-            return { status: 'safe', thresholdText: 'FAO range: 6.0 - 8.4' };
+          if (val >= 5.5 && val <= 8.4) {
+            return { status: 'safe', thresholdText: 'FAO range: 5.5 - 8.4' };
           }
-          if ((val >= 5.5 && val < 6.0) || (val > 8.4 && val <= 8.8)) {
+          if ((val >= 5.0 && val < 5.5) || (val > 8.4 && val <= 8.8)) {
             return {
               status: 'caution',
-              reason: 'pH slightly outside optimal agronomic range (6.0 - 8.4)',
-              thresholdText: 'FAO range: 6.0 - 8.4',
+              reason: 'pH slightly outside optimal agronomic range (5.5 - 8.4)',
+              thresholdText: 'FAO range: 5.5 - 8.4',
             };
           }
           return {
             status: 'unsafe',
             reason: 'Extreme pH causes nutrient lockup or root toxicity',
-            thresholdText: 'FAO range: 6.0 - 8.4',
+            thresholdText: 'FAO range: 5.5 - 8.4',
           };
         },
       },
@@ -209,20 +209,20 @@ const EVALUATION_CONFIGS: Record<AgriculturalUseId, UseEvaluationConfig> = {
         label: 'pH Level',
         unit: '',
         evaluate: (val) => {
-          if (val >= 6.0 && val <= 8.4) {
-            return { status: 'safe', thresholdText: 'FAO range: 6.0 - 8.4' };
+          if (val >= 5.5 && val <= 8.4) {
+            return { status: 'safe', thresholdText: 'FAO range: 5.5 - 8.4' };
           }
-          if ((val >= 5.5 && val < 6.0) || (val > 8.4 && val <= 8.8)) {
+          if ((val >= 5.0 && val < 5.5) || (val > 8.4 && val <= 8.8)) {
             return {
               status: 'caution',
-              reason: 'pH outside ideal vineyard nutrient absorption range (6.0 - 8.4)',
-              thresholdText: 'FAO range: 6.0 - 8.4',
+              reason: 'pH outside ideal vineyard nutrient absorption range (5.5 - 8.4)',
+              thresholdText: 'FAO range: 5.5 - 8.4',
             };
           }
           return {
             status: 'unsafe',
             reason: 'Severe pH imbalance prevents micronutrient uptake in vines',
-            thresholdText: 'FAO range: 6.0 - 8.4',
+            thresholdText: 'FAO range: 5.5 - 8.4',
           };
         },
       },
@@ -308,20 +308,20 @@ const EVALUATION_CONFIGS: Record<AgriculturalUseId, UseEvaluationConfig> = {
         label: 'pH Level',
         unit: '',
         evaluate: (val) => {
-          if (val >= 5.8 && val <= 8.5) {
-            return { status: 'safe', thresholdText: 'FAO range: 5.8 - 8.5' };
+          if (val >= 5.5 && val <= 8.5) {
+            return { status: 'safe', thresholdText: 'FAO range: 5.5 - 8.5' };
           }
-          if ((val >= 5.2 && val < 5.8) || (val > 8.5 && val <= 8.9)) {
+          if ((val >= 5.0 && val < 5.5) || (val > 8.5 && val <= 8.9)) {
             return {
               status: 'caution',
-              reason: 'pH outside preferred olive soil interaction range (5.8 - 8.5)',
-              thresholdText: 'FAO range: 5.8 - 8.5',
+              reason: 'pH outside preferred olive soil interaction range (5.5 - 8.5)',
+              thresholdText: 'FAO range: 5.5 - 8.5',
             };
           }
           return {
             status: 'unsafe',
             reason: 'Severe pH imbalance damages olive root zone',
-            thresholdText: 'FAO range: 5.8 - 8.5',
+            thresholdText: 'FAO range: 5.5 - 8.5',
           };
         },
       },
@@ -407,20 +407,20 @@ const EVALUATION_CONFIGS: Record<AgriculturalUseId, UseEvaluationConfig> = {
         label: 'pH Level',
         unit: '',
         evaluate: (val) => {
-          if (val >= 6.0 && val <= 8.5) {
-            return { status: 'safe', thresholdText: 'FAO range: 6.0 - 8.5' };
+          if (val >= 5.5 && val <= 8.5) {
+            return { status: 'safe', thresholdText: 'FAO range: 5.5 - 8.5' };
           }
-          if ((val >= 5.5 && val < 6.0) || (val > 8.5 && val <= 9.0)) {
+          if ((val >= 5.0 && val < 5.5) || (val > 8.5 && val <= 9.0)) {
             return {
               status: 'caution',
-              reason: 'pH outside normal livestock drinking preference (6.0 - 8.5)',
-              thresholdText: 'FAO range: 6.0 - 8.5',
+              reason: 'pH outside normal livestock drinking preference (5.5 - 8.5)',
+              thresholdText: 'FAO range: 5.5 - 8.5',
             };
           }
           return {
             status: 'unsafe',
             reason: 'Severe pH abnormality causes digestive disturbances in animals',
-            thresholdText: 'FAO range: 6.0 - 8.5',
+            thresholdText: 'FAO range: 5.5 - 8.5',
           };
         },
       },

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { useAuth } from '../../context/AuthContext';
+import { useDemo } from '../../context/DemoContext';
 import {
   calculateBlendQuality,
   formatQualityMetric,
@@ -29,7 +30,7 @@ import {
 import { generateFaoComplianceReport } from '../../domain/faoComplianceEngine';
 import { QualityMetricCard } from './QualityMetricCard';
 import { ComplianceCard } from './ComplianceCard';
-import { SOURCE_WATER_QUALITIES } from '../../types/quality';
+import { SOURCE_WATER_QUALITY_PROFILES } from '../../types/quality';
 
 /**
  * Water Quality & FAO Crop Compliance Screen component.
@@ -45,6 +46,7 @@ import { SOURCE_WATER_QUALITIES } from '../../types/quality';
 export function QualityView(): React.JSX.Element {
   const { telemetry } = useTelemetry();
   const { activeFarm } = useAuth();
+  const { qualityRegime } = useDemo();
 
   // Compute live Blend tank quality from current reservoir volumes
   const tankVolumes = telemetry?.tankVolumes ?? {
@@ -54,7 +56,10 @@ export function QualityView(): React.JSX.Element {
     blend: 0,
   };
 
-  const quality = calculateBlendQuality(tankVolumes);
+  // The supply itself changes with the demo state, not only how much of it the farm is drawing,
+  // so the regime has to reach the mixing model and the source readings below alike.
+  const quality = calculateBlendQuality(tankVolumes, qualityRegime);
+  const sourceQualities = SOURCE_WATER_QUALITY_PROFILES[qualityRegime];
   const complianceReport = generateFaoComplianceReport(quality);
 
   const {
@@ -219,7 +224,7 @@ export function QualityView(): React.JSX.Element {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                TDS: {SOURCE_WATER_QUALITIES.rainwater.tds} mg/L | EC: {SOURCE_WATER_QUALITIES.rainwater.ec} µS/cm
+                TDS: {sourceQualities.rainwater.tds} mg/L | EC: {sourceQualities.rainwater.ec} µS/cm
               </p>
             </div>
             <span className="text-[11px] text-emerald-400 font-medium">Ultra-low Salinity</span>
@@ -235,7 +240,7 @@ export function QualityView(): React.JSX.Element {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                TDS: {SOURCE_WATER_QUALITIES.esa.tds} mg/L | EC: {SOURCE_WATER_QUALITIES.esa.ec} µS/cm
+                TDS: {sourceQualities.esa.tds} mg/L | EC: {sourceQualities.esa.ec} µS/cm
               </p>
             </div>
             <span className="text-[11px] text-emerald-400 font-medium">Pure Distillate</span>
@@ -251,7 +256,7 @@ export function QualityView(): React.JSX.Element {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                TDS: {SOURCE_WATER_QUALITIES.external.tds} mg/L | EC: {SOURCE_WATER_QUALITIES.external.ec} µS/cm
+                TDS: {sourceQualities.external.tds} mg/L | EC: {sourceQualities.external.ec} µS/cm
               </p>
             </div>
             <span className="text-[11px] text-amber-400 font-medium">Mineralized Water</span>

@@ -87,6 +87,7 @@ describe('DemoContext', () => {
     const {
       scenario,
       isUnoptimizedBaseline,
+      qualityRegime,
       isDrawerOpen,
       isOptimizing,
       optimizationProgress,
@@ -105,6 +106,7 @@ describe('DemoContext', () => {
       <div>
         <div data-testid="scenario">{scenario}</div>
         <div data-testid="isUnoptimized">{String(isUnoptimizedBaseline)}</div>
+        <div data-testid="qualityRegime">{qualityRegime}</div>
         <div data-testid="isDrawerOpen">{String(isDrawerOpen)}</div>
         <div data-testid="isOptimizing">{String(isOptimizing)}</div>
         <div data-testid="progress">{optimizationProgress}</div>
@@ -478,6 +480,59 @@ describe('DemoContext', () => {
       });
 
       expect(setTankVolumesMock).not.toHaveBeenCalledWith(workedVolumes);
+    });
+  });
+  describe('Water quality regime', () => {
+    it('draws the balanced supply in live weather', () => {
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      expect(screen.getByTestId('qualityRegime').textContent).toBe('balanced');
+    });
+
+    it('switches to the stressed supply in the High Salinity scenario', () => {
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Select Salinity').click();
+      });
+
+      expect(screen.getByTestId('qualityRegime').textContent).toBe('stressed');
+    });
+
+    it('keeps the balanced supply in scenarios that are not about water quality', () => {
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Select Drought').click();
+      });
+
+      expect(screen.getByTestId('qualityRegime').textContent).toBe('balanced');
+    });
+
+    it('switches to the stressed supply for the unoptimized baseline', () => {
+      render(
+        <DemoProvider>
+          <TestConsumer />
+        </DemoProvider>
+      );
+
+      act(() => {
+        screen.getByText('Toggle Baseline').click();
+      });
+
+      expect(screen.getByTestId('qualityRegime').textContent).toBe('stressed');
     });
   });
 });

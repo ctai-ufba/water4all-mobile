@@ -14,6 +14,7 @@ describe('OptimizationProgressModal', () => {
   const defaultDemoContext = {
     scenario: 'live' as const,
     isUnoptimizedBaseline: false,
+    qualityRegime: 'balanced' as const,
     simulatedDate: new Date(),
     elapsedSimulatedHours: 0,
     isDrawerOpen: false,

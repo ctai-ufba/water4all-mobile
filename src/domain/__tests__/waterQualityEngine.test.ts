@@ -14,6 +14,7 @@ import {
 } from '../waterQualityEngine';
 import { TankVolumeMetrics } from '../../types/telemetry';
 import { SOURCE_WATER_QUALITIES } from '../../types/quality';
+import { evaluateCropCompliance } from '../faoComplianceEngine';
 
 describe('Water Quality Engine Seam', () => {
   describe('calculateBlendQuality', () => {
@@ -139,7 +140,7 @@ describe('Water Quality Engine Seam', () => {
   describe('getNominalRangeDescription', () => {
     it('provides standard nominal range strings for all four parameters', () => {
       expect(getNominalRangeDescription('tds')).toContain('mg/L');
-      expect(getNominalRangeDescription('ph')).toContain('6.0');
+      expect(getNominalRangeDescription('ph')).toContain('5.5');
       expect(getNominalRangeDescription('nitrates')).toContain('mg/L');
       expect(getNominalRangeDescription('ec')).toContain('µS/cm');
     });
@@ -160,7 +161,9 @@ describe('Water Quality Engine Seam', () => {
 
     it('evaluates safe, caution, and unsafe levels for pH', () => {
       expect(evaluateFreshwaterMetricStatus('ph', 7.2)).toBe('safe');
-      expect(evaluateFreshwaterMetricStatus('ph', 5.8)).toBe('caution');
+      // 5.8 is ordinary rainwater, and sits inside the prototype's 5.5 irrigation floor.
+      expect(evaluateFreshwaterMetricStatus('ph', 5.8)).toBe('safe');
+      expect(evaluateFreshwaterMetricStatus('ph', 5.2)).toBe('caution');
       expect(evaluateFreshwaterMetricStatus('ph', 9.2)).toBe('unsafe');
     });
 
@@ -172,3 +175,53 @@ describe('Water Quality Engine Seam', () => {
   });
 });
 
+describe('Water Quality Regimes (prototipo_water4all presets)', () => {
+  const salinityVolumes = { rainwater: 1.0, esa: 0.5, external: 18.0, blend: 24.5 };
+  const unoptimizedVolumes = { rainwater: 0.3, esa: 0.2, external: 2.0, blend: 5.5 };
+  const optimizedVolumes = { rainwater: 36.0, esa: 9.6, external: 5.0, blend: 28.0 };
+
+  it('defaults to the balanced supply the calibrated farm draws on', () => {
+    const balanced = calculateBlendQuality(salinityVolumes);
+    const explicit = calculateBlendQuality(salinityVolumes, 'balanced');
+    expect(balanced).toEqual(explicit);
+  });
+
+  it('raises salinity under the stressed supply', () => {
+    const balanced = calculateBlendQuality(salinityVolumes, 'balanced');
+    const stressed = calculateBlendQuality(salinityVolumes, 'stressed');
+
+    expect(stressed.ec).toBeGreaterThan(balanced.ec);
+    expect(stressed.tds).toBeGreaterThan(balanced.tds);
+  });
+
+  it('breaches the sensitive-crop thresholds the balanced supply cannot reach', () => {
+    const stressed = calculateBlendQuality(salinityVolumes, 'stressed');
+
+    expect(evaluateFreshwaterMetricStatus('ec', stressed.ec)).not.toBe('safe');
+    expect(evaluateFreshwaterMetricStatus('tds', stressed.tds)).not.toBe('safe');
+    expect(evaluateCropCompliance('vegetables', stressed).status).not.toBe('safe');
+  });
+
+  it('fails crop compliance for the unoptimized farm leaning on that supply', () => {
+    const stressed = calculateBlendQuality(unoptimizedVolumes, 'stressed');
+    expect(evaluateCropCompliance('vegetables', stressed).status).not.toBe('safe');
+  });
+
+  it('leaves salt-tolerant olives unaffected, which is what the matrix is for', () => {
+    const stressed = calculateBlendQuality(salinityVolumes, 'stressed');
+    expect(evaluateCropCompliance('olive-trees', stressed).status).toBe('safe');
+  });
+
+  it('keeps the optimized design compliant on every use', () => {
+    // Its Blend runs on rainwater, whose pH sits near 5.9. The prototype's irrigation floor is
+    // 5.5, so a rainwater-fed farm is compliant; a stricter floor would penalise the design
+    // precisely for maximising sustainable local water.
+    const quality = calculateBlendQuality(optimizedVolumes);
+    expect(quality.ph).toBeGreaterThan(5.5);
+    expect(quality.ph).toBeLessThan(6.0);
+
+    for (const use of ['vegetables', 'vineyards', 'olive-trees', 'livestock'] as const) {
+      expect(evaluateCropCompliance(use, quality).status).toBe('safe');
+    }
+  });
+});

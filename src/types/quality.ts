@@ -24,26 +24,76 @@ export interface WaterQualityMetrics {
  * Standard water quality profiles for individual farm water sources
  * based on canonical Mediterranean simulation benchmarks.
  */
-export const SOURCE_WATER_QUALITIES: Record<'rainwater' | 'esa' | 'external', WaterQualityMetrics> = {
-  rainwater: {
-    tds: 80.0,
-    ph: 5.8,
-    nitrates: 4.0,
-    ec: 100.0,
+/**
+ * Water quality regime the farm's supply is in.
+ * - 'balanced': the ordinary supply a calibrated farm draws on.
+ * - 'stressed': a saltier external supply and more acidic rainfall.
+ */
+export type WaterQualityRegime = 'balanced' | 'stressed';
+
+/**
+ * Source water quality regimes ported from prototipo_water4all's scenario presets.
+ *
+ * @remarks The prototype models water stress by changing the supply itself, not only the volumes
+ * drawn from it, and ships presets for each regime. 'balanced' is its Balanced preset, the ordinary
+ * supply the calibrated farm draws on. 'stressed' is its Stressed preset: a saltier, more polluted
+ * external supply with more acidic rainfall, which is the regime a High Salinity scenario or a farm
+ * living off emergency deliveries is actually in. Only the volumes were ported originally, so no
+ * state the app could reach ever crossed a compliance threshold.
+ */
+export const SOURCE_WATER_QUALITY_PROFILES: Record<
+  WaterQualityRegime,
+  Record<'rainwater' | 'esa' | 'external', WaterQualityMetrics>
+> = {
+  balanced: {
+    rainwater: {
+      tds: 80.0,
+      ph: 5.8,
+      nitrates: 4.0,
+      ec: 100.0,
+    },
+    esa: {
+      tds: 5.0,
+      ph: 7.0,
+      nitrates: 0.2,
+      ec: 10.0,
+    },
+    external: {
+      tds: 450.0,
+      ph: 7.2,
+      nitrates: 18.0,
+      ec: 720.0,
+    },
   },
-  esa: {
-    tds: 5.0,
-    ph: 7.0,
-    nitrates: 0.2,
-    ec: 10.0,
-  },
-  external: {
-    tds: 450.0,
-    ph: 7.2,
-    nitrates: 18.0,
-    ec: 720.0,
+  stressed: {
+    rainwater: {
+      tds: 90.0,
+      ph: 5.4,
+      nitrates: 5.0,
+      ec: 130.0,
+    },
+    esa: {
+      tds: 8.0,
+      ph: 6.8,
+      nitrates: 0.3,
+      ec: 50.0,
+    },
+    external: {
+      tds: 500.0,
+      ph: 7.4,
+      nitrates: 22.0,
+      ec: 900.0,
+    },
   },
 };
+
+/**
+ * Source water quality of the ordinary balanced supply.
+ *
+ * @remarks Kept as the name for the default regime, which is what a farm running normally draws.
+ * Anything that varies with the active demo state should read SOURCE_WATER_QUALITY_PROFILES.
+ */
+export const SOURCE_WATER_QUALITIES = SOURCE_WATER_QUALITY_PROFILES.balanced;
 
 /**
  * Traffic-light compliance status according to FAO agricultural guidelines.

@@ -86,6 +86,7 @@ describe('Demo Controller UI Components', () => {
     vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
       scenario: 'live',
       isUnoptimizedBaseline: false,
+      qualityRegime: 'balanced',
       simulatedDate: new Date('2026-09-21T12:00:00Z'),
       elapsedSimulatedHours: 0,
       isDrawerOpen: true,
@@ -124,6 +125,7 @@ describe('Demo Controller UI Components', () => {
       vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
         scenario: 'live',
         isUnoptimizedBaseline: true,
+        qualityRegime: 'balanced',
         simulatedDate: new Date('2026-09-21T12:00:00Z'),
         elapsedSimulatedHours: 0,
         isDrawerOpen: true,
@@ -184,6 +186,7 @@ describe('Demo Controller UI Components', () => {
       vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
         scenario: 'drought',
         isUnoptimizedBaseline: false,
+        qualityRegime: 'balanced',
         simulatedDate: new Date(),
         elapsedSimulatedHours: 0,
         isDrawerOpen: false,
@@ -211,6 +214,7 @@ describe('Demo Controller UI Components', () => {
       vi.spyOn(DemoContextModule, 'useDemo').mockReturnValue({
         scenario: 'live',
         isUnoptimizedBaseline: false,
+        qualityRegime: 'balanced',
         simulatedDate: new Date(),
         elapsedSimulatedHours: 0,
         isDrawerOpen: false,
