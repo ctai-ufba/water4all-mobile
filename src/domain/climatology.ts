@@ -35,7 +35,7 @@ export interface MonthlyClimateNormals {
 }
 
 /**
- * Antequera, Andalusia, Spain (37.02° N, 4.56° W).
+ * Antequera, Andalusia, Spain (farm site at 37.01° N, 4.64° W).
  *
  * @remarks Inland Andalusia, so winters are cooler and summers hotter than the Málaga coast, and
  * the diurnal swing is wide. Roughly 490 mm of rain across about 50 rainy days, almost none of it
@@ -51,7 +51,7 @@ export const ANTEQUERA_NORMALS: MonthlyClimateNormals = {
 };
 
 /**
- * Heraklion, Crete, Greece (35.34° N, 25.14° E).
+ * Heraklion, Crete, Greece (farm site at 35.24° N, 25.10° E).
  *
  * @remarks Maritime, so the diurnal swing is narrow and humidity stays high year round. Rainfall
  * totals resemble Antequera's but arrive over more days, concentrated in a wetter winter, and the

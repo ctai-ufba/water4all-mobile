@@ -15,9 +15,9 @@ export type FarmId = 'small-farm' | 'medium-farm';
  * Geographic coordinates in decimal degrees.
  */
 export interface Coordinates {
-  /** Latitude in decimal degrees (e.g., 37.0194 for Antequera) */
+  /** Latitude in decimal degrees (e.g., 37.0051 for the Antequera site) */
   latitude: number;
-  /** Longitude in decimal degrees (e.g., -4.5612 for Antequera) */
+  /** Longitude in decimal degrees (e.g., -4.6425 for the Antequera site) */
   longitude: number;
 }
 
@@ -93,9 +93,17 @@ export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
     name: 'Small Farm',
     estateName: 'Finca El Olivar',
     location: 'Antequera, Andalusia, Spain',
+    /*
+      Cultivated land in the Vega de Antequera, about 7 km south-west of the town and inside its
+      municipality, so "Antequera, Andalusia" stays literally true. The town-centre coordinates
+      this replaced put an olive-grove estate on the main square, which the site map made obvious.
+      The point sits inside an unnamed olive grove (OSM `landuse=orchard`, `crop=olive_trees`)
+      rather than on a real named finca: this profile carries invented telemetry, and invented
+      telemetry does not belong on an identifiable business's land.
+    */
     coordinates: {
-      latitude: 37.0194,
-      longitude: -4.5612,
+      latitude: 37.0051,
+      longitude: -4.6425,
     },
     // Prototype Small case: 1.84 ha of olives, vineyards, vegetables, pasture and fruit trees.
     areaHa: 0.184,
@@ -122,9 +130,15 @@ export const FARM_PROFILES: Record<FarmId, FarmProfile> = {
     name: 'Medium Farm',
     estateName: 'Ktima Helios',
     location: 'Heraklion, Crete, Greece',
+    /*
+      Vineyard bordering olive groves near Agios Syllas, in the Temenos unit of the Municipality of
+      Heraklion, about 12 km inland from the city; "Heraklion, Crete" remains true at municipality
+      level. The mixed vine-and-olive land matches this profile's crops, which the city-centre
+      coordinates could not. Unnamed parcels only, for the reason given on the Small Farm above.
+    */
     coordinates: {
-      latitude: 35.3387,
-      longitude: 25.1442,
+      latitude: 35.2373,
+      longitude: 25.1029,
     },
     // Prototype Medium case: 4.6 ha across olives, vineyards, vegetables, pasture and fruit.
     areaHa: 0.46,

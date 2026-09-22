@@ -34,7 +34,7 @@ describe('Header Seam', () => {
     expect(screen.getByText(activeFarm.name)).toBeInTheDocument();
     expect(screen.getByText(activeFarm.estateName)).toBeInTheDocument();
     expect(screen.getByText(activeFarm.location)).toBeInTheDocument();
-    expect(screen.getByText(/37.0194° N, 4.5612° W/i)).toBeInTheDocument();
+    expect(screen.getByText(/37.0051° N, 4.6425° W/i)).toBeInTheDocument();
   });
 
   it('calls logout when the logout button is clicked', () => {

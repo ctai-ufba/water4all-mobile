@@ -18,7 +18,7 @@ import { ALL_FARM_PROFILES } from '../../types/farm';
  *
  * @param lat - Latitude in decimal degrees.
  * @param lng - Longitude in decimal degrees.
- * @returns Formatted coordinate string, e.g. "37.0194° N, 4.5612° W".
+ * @returns Formatted coordinate string, e.g. "37.0051° N, 4.6425° W".
  * @throws Never throws.
  */
 export function formatCoordinates(lat: number, lng: number): string {

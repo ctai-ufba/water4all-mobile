@@ -52,7 +52,7 @@ function buildValidPayload(overrides: Partial<OpenMeteoApiResponse> = {}): OpenM
 }
 
 describe('Weather Service Seam', () => {
-  const antequeraCoords = { latitude: 37.0194, longitude: -4.5612 };
+  const antequeraCoords = { latitude: 37.0051, longitude: -4.6425 };
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -397,7 +397,7 @@ describe('Weather Service Seam', () => {
 
       const antequera = await fetchFarmWeather(antequeraCoords, 8000, 'small-farm');
       const heraklion = await fetchFarmWeather(
-        { latitude: 35.3387, longitude: 25.1442 },
+        { latitude: 35.2373, longitude: 25.1029 },
         8000,
         'medium-farm'
       );

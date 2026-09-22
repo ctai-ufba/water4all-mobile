@@ -6,11 +6,11 @@ All terms are in English to match the canonical engineering model and frontend i
 ## 1. Locations and Farm Profiles
 
 **Small Farm**:
-A family-scale Mediterranean farm profile located in **Antequera, Andalusia, Spain** (37.0194° N, 4.5612° W).
+A family-scale Mediterranean farm profile located on cultivated land in the **municipality of Antequera, Andalusia, Spain** (37.0051° N, 4.6425° W), about 7 km south-west of the town.
 Focuses on olive groves and vineyards, relying heavily on rainwater catchment and ESA water.
 
 **Medium Farm**:
-A commercial-scale Mediterranean farm profile located in **Heraklion, Crete, Greece** (35.3387° N, 25.1442° E).
+A commercial-scale Mediterranean farm profile located on mixed vine and olive land in the **municipality of Heraklion, Crete, Greece** (35.2373° N, 25.1029° E), about 12 km inland from the city.
 Features mixed operations including olive trees, vineyards, greenhouse vegetables, and livestock, with higher water throughput and external supply access.
 
 **Profile scale factor**:
