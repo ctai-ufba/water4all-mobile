@@ -14,6 +14,7 @@ import * as TelemetryContextModule from '../../../context/TelemetryContext';
 import * as WeatherContextModule from '../../../context/WeatherContext';
 import { FARM_PROFILES } from '../../../types/farm';
 import { TelemetryState } from '../../../types/telemetry';
+import { seedHistoricalTelemetry } from '../../../domain/historicalTelemetry';
 
 describe('DashboardView Seam', () => {
   const mockFarm = FARM_PROFILES['small-farm'];
@@ -156,6 +157,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: seedHistoricalTelemetry(mockFarm, new Date('2026-03-08T12:00:00Z'), normalTelemetry.tankVolumes, normalTelemetry.flows),
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -166,6 +169,8 @@ describe('DashboardView Seam', () => {
     expect(screen.getByTestId('weather-temp-value')).toHaveTextContent('22.0');
     expect(screen.getByTestId('weather-humidity-value')).toHaveTextContent('60');
     expect(screen.getByTestId('weather-rain-value')).toHaveTextContent('2.0');
+    expect(screen.getByRole('img', { name: 'Daily water balance trend' })).toHaveTextContent('Mar 1:');
+    expect(screen.getByRole('img', { name: 'ESA water yield trend' })).toHaveTextContent('Mar 7:');
   });
 
   it('opens the Weather view when the ambient strip is pressed', () => {
@@ -188,6 +193,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView onNavigate={navigateMock} />);
@@ -216,6 +223,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -243,6 +252,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -272,6 +283,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -312,6 +325,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -342,6 +357,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -371,6 +388,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);
@@ -397,6 +416,8 @@ describe('DashboardView Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<DashboardView />);

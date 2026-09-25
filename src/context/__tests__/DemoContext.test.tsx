@@ -43,10 +43,13 @@ describe('DemoContext', () => {
   const resetToBaselineMock = vi.fn();
   const applySnapshotMock = vi.fn();
   const setCustomWeatherMock = vi.fn();
+  const recordTimeAdvanceMock = vi.fn();
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
+    localStorage.clear();
+    recordTimeAdvanceMock.mockClear();
 
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       activeFarm: mockFarm,
@@ -66,6 +69,8 @@ describe('DemoContext', () => {
       resetToBaseline: resetToBaselineMock,
       applySnapshot: applySnapshotMock,
       scheduledIrrigationDemand: mockBaseline.flows.irrigationDemand,
+      history: [],
+      recordTimeAdvance: recordTimeAdvanceMock,
     });
 
     vi.spyOn(WeatherContextModule, 'useWeather').mockReturnValue({
@@ -96,6 +101,7 @@ describe('DemoContext', () => {
       isOptimizing,
       optimizationProgress,
       elapsedSimulatedHours,
+      simulatedDate,
       openDrawer,
       closeDrawer,
       selectScenario,
@@ -115,6 +121,7 @@ describe('DemoContext', () => {
         <div data-testid="isOptimizing">{String(isOptimizing)}</div>
         <div data-testid="progress">{optimizationProgress}</div>
         <div data-testid="elapsedHours">{elapsedSimulatedHours}</div>
+        <div data-testid="simulatedDate">{simulatedDate.toISOString()}</div>
 
         <button onClick={openDrawer}>Open Drawer</button>
         <button onClick={closeDrawer}>Close Drawer</button>
@@ -282,7 +289,7 @@ describe('DemoContext', () => {
   });
 
   it('advances virtual time and updates tank volumes with simulation step', () => {
-    render(
+    const first = render(
       <DemoProvider>
         <TestConsumer />
       </DemoProvider>
@@ -295,6 +302,17 @@ describe('DemoContext', () => {
     expect(screen.getByTestId('elapsedHours').textContent).toBe('6');
     expect(setTankVolumesMock).toHaveBeenCalled();
     expect(setFlowsMock).toHaveBeenCalled();
+    expect(recordTimeAdvanceMock).toHaveBeenCalledWith(expect.objectContaining({
+      startDate: expect.any(Date), endDate: expect.any(Date),
+      startVolumes: mockTelemetry.tankVolumes,
+      endVolumes: expect.any(Object), flows: expect.any(Object),
+    }));
+
+    const advancedDate = screen.getByTestId('simulatedDate').textContent;
+    first.unmount();
+    render(<DemoProvider><TestConsumer /></DemoProvider>);
+    expect(screen.getByTestId('elapsedHours')).toHaveTextContent('6');
+    expect(screen.getByTestId('simulatedDate')).toHaveTextContent(advancedDate ?? '');
   });
 
   it('executes 2-second animated optimization and applies optimal parameters (ADR 0002)', async () => {
@@ -380,6 +398,8 @@ describe('DemoContext', () => {
         resetToBaseline: resetToBaselineMock,
         applySnapshot: applySnapshotMock,
         scheduledIrrigationDemand: mockBaseline.flows.irrigationDemand,
+        history: [],
+        recordTimeAdvance: vi.fn(),
       });
     }
 
@@ -440,6 +460,8 @@ describe('DemoContext', () => {
         resetToBaseline: resetToBaselineMock,
         applySnapshot: applySnapshotMock,
         scheduledIrrigationDemand: mockBaseline.flows.irrigationDemand,
+        history: [],
+        recordTimeAdvance: vi.fn(),
       });
     }
 

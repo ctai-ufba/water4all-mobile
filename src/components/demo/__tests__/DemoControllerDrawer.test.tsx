@@ -60,6 +60,8 @@ describe('Demo Controller UI Components', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: baseline.flows.irrigationDemand,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
   }
 

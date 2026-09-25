@@ -12,6 +12,7 @@ import * as AuthContextModule from '../../../context/AuthContext';
 import * as TelemetryContextModule from '../../../context/TelemetryContext';
 import { FARM_PROFILES } from '../../../types/farm';
 import { TelemetryState } from '../../../types/telemetry';
+import { seedHistoricalTelemetry } from '../../../domain/historicalTelemetry';
 
 describe('TanksView Component', () => {
   const mockFarm = FARM_PROFILES['small-farm'];
@@ -83,6 +84,8 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);
@@ -100,12 +103,18 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: seedHistoricalTelemetry(mockFarm, new Date('2026-03-08T12:00:00Z'), normalTelemetry.tankVolumes, normalTelemetry.flows),
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);
 
     expect(screen.getByText(/Tanks & Sources/i)).toBeInTheDocument();
     expect(screen.getByText(/Total Farm Storage/i)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Rainwater storage trend' })).toHaveTextContent('Mar 1:');
+    expect(screen.getByRole('img', { name: 'ESA storage trend' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'External supply storage trend' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Blend storage trend' })).toHaveTextContent('Mar 7:');
 
     // Small farm baseline total capacity is 45 + 1.6 + 20 + 35 = 101.6 m³
     expect(screen.getByText(/77.2 m³/i)).toBeInTheDocument();
@@ -123,6 +132,8 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);
@@ -159,6 +170,8 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);
@@ -181,6 +194,8 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);
@@ -204,6 +219,8 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);
@@ -224,6 +241,8 @@ describe('TanksView Component', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
 
     render(<TanksView />);

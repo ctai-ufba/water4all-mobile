@@ -128,6 +128,8 @@ function mockTelemetry(telemetry: TelemetryState | null): void {
     resetToBaseline: vi.fn(),
     applySnapshot: vi.fn(),
     scheduledIrrigationDemand: BASELINE_TELEMETRY['small-farm'].flows.irrigationDemand,
+    history: [],
+    recordTimeAdvance: vi.fn(),
   });
 }
 

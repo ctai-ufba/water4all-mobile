@@ -26,8 +26,10 @@ import {
   WaterTruckDeliveryResult,
   TransferSourceTank,
   TelemetrySnapshot,
+  HistoricalTelemetryDay,
 } from '../types/telemetry';
 import { computeTelemetryState } from '../domain/telemetryEngine';
+import { HistoricalTelemetryStep, recordHistoricalTelemetry, seedHistoricalTelemetry } from '../domain/historicalTelemetry';
 import {
   calculateTruckDelivery,
   calculateIrrigationDemand,
@@ -40,6 +42,13 @@ import {
 export interface TelemetryContextType {
   /** Consolidated active telemetry state, or null if no farm is authenticated */
   telemetry: TelemetryState | null;
+  /** Seven chronological daily observations for the active farm. */
+  history: HistoricalTelemetryDay[];
+  /**
+   * Integrates a Demo Drawer interval into persisted daily history. A zero-length interval
+   * resets the seven-day window at its end date, such as when virtual time is reset.
+   */
+  recordTimeAdvance: (step: HistoricalTelemetryStep) => void;
   /**
    * Updates one or more reservoir volumes and recomputes consolidated telemetry.
    *
@@ -164,7 +173,7 @@ function readSlot<T>(farmId: FarmId, slot: TelemetrySlot, fallback: T): T {
 }
 
 /**
- * Independently persisted slots of a farm's telemetry state.
+ * Resettable persisted slots of a farm's active telemetry state.
  *
  * @remarks Declared as a list rather than a union so that operations covering the whole of a
  * farm's persisted state, such as resetToBaseline, iterate it instead of enumerating slots by
@@ -178,7 +187,7 @@ const TELEMETRY_SLOTS = [
   'truckCost',
 ] as const;
 
-type TelemetrySlot = (typeof TELEMETRY_SLOTS)[number];
+type TelemetrySlot = (typeof TELEMETRY_SLOTS)[number] | 'history';
 
 /**
  * Builds the localStorage key holding one slot of one farm's telemetry.
@@ -317,6 +326,28 @@ function loadScheduledDemand(farmId: FarmId): number {
   );
 }
 
+/** Loads a farm's saved history, or seeds it once from its current state. */
+function loadHistory(
+  farm: NonNullable<ReturnType<typeof useAuth>['activeFarm']>,
+  volumes: TankVolumeMetrics,
+  flows: WaterFlowMetrics
+): HistoricalTelemetryDay[] {
+  const stored = readSlot<unknown>(farm.id, 'history', null);
+  if (Array.isArray(stored) && stored.length === 7 && stored.every((day) =>
+    day && typeof day.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day.date) &&
+    ['inflow', 'consumption', 'netBalance', 'esaYield'].every((key) =>
+      typeof day[key] === 'number' && Number.isFinite(day[key])) &&
+    (day.source === 'seed' || day.source === 'simulated') &&
+    day.tankVolumes && ['rainwater', 'esa', 'external', 'blend'].every((key) =>
+      typeof day.tankVolumes[key] === 'number' && Number.isFinite(day.tankVolumes[key]))
+  )) {
+    return stored as HistoricalTelemetryDay[];
+  }
+  const seeded = seedHistoricalTelemetry(farm, new Date(), volumes, flows);
+  persistSlot(farm.id, 'history', seeded);
+  return seeded;
+}
+
 /**
  * Props for the TelemetryProvider component.
  */
@@ -380,6 +411,15 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
     return 0;
   });
 
+  const [history, setHistory] = useState<HistoricalTelemetryDay[]>(() => {
+    if (!activeFarm) return [];
+    const baseline = getFarmBaseline(activeFarm.id);
+    const savedVolumes = readSlot(activeFarm.id, 'volumes', baseline.volumes);
+    const savedMode = readSlot<IrrigationMode>(activeFarm.id, 'irrigationMode', 'auto');
+    const savedFlows = rehydrateFlows(activeFarm.id, savedMode, loadScheduledDemand(activeFarm.id));
+    return loadHistory(activeFarm, savedVolumes, savedFlows);
+  });
+
   // Reinitialize volumes and flows whenever the active farm profile changes
   useEffect(() => {
     if (activeFarm) {
@@ -393,14 +433,35 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       setIrrigationModeState(savedMode);
       setScheduledIrrigationDemand(savedSchedule);
       setCumulativeTruckCost(readSlot<number>(activeFarm.id, 'truckCost', 0));
+      setHistory(loadHistory(
+        activeFarm,
+        readSlot(activeFarm.id, 'volumes', baseline.volumes),
+        rehydrateFlows(activeFarm.id, savedMode, savedSchedule)
+      ));
     } else {
       setVolumes(null);
       setFlowsState(null);
       setIrrigationModeState('auto');
       setScheduledIrrigationDemand(0);
       setCumulativeTruckCost(0);
+      setHistory([]);
     }
   }, [activeFarm?.id]);
+
+  const recordTimeAdvance = (step: HistoricalTelemetryStep): void => {
+    if (!activeFarm || step.endDate.getTime() < step.startDate.getTime()) return;
+    setHistory((previous) => {
+      // Reset Time can move the demo behind its most recent observation. Begin a new seven-day
+      // window in that case so a new advance never leaves future dates in the trend.
+      const latest = previous.at(-1);
+      const isReset = step.endDate.getTime() === step.startDate.getTime();
+      const next = isReset || (latest && latest.date > step.startDate.toISOString().slice(0, 10))
+        ? seedHistoricalTelemetry(activeFarm, step.endDate, step.endVolumes, step.flows)
+        : recordHistoricalTelemetry(previous, step);
+      persistSlot(activeFarm.id, 'history', next);
+      return next;
+    });
+  };
 
   /**
    * Updates reservoir storage volumes and synchronizes with localStorage.
@@ -656,6 +717,8 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
   const contextValue = useMemo<TelemetryContextType>(
     () => ({
       telemetry,
+      history,
+      recordTimeAdvance,
       setTankVolumes,
       setFlows,
       setIrrigationMode,
@@ -665,7 +728,7 @@ export function TelemetryProvider({ children }: TelemetryProviderProps): React.J
       applySnapshot,
       scheduledIrrigationDemand,
     }),
-    [telemetry, scheduledIrrigationDemand]
+    [telemetry, scheduledIrrigationDemand, history]
   );
 
   return (

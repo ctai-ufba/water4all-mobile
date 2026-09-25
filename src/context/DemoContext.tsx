@@ -33,6 +33,7 @@ import {
   OPTIMIZATION_DURATION_MS,
 } from '../domain/demoEngine';
 import { getFarmBaseline, TankVolumeMetrics } from '../types/telemetry';
+import { FarmId } from '../types/farm';
 import { WaterQualityRegime } from '../types/quality';
 
 /**
@@ -83,6 +84,42 @@ export interface DemoContextType {
 
 const DemoContext = createContext<DemoContextType | undefined>(undefined);
 
+function clockKey(farmId: FarmId): string {
+  return `water4all_demo_${farmId}_clock`;
+}
+
+/** Keeps the simulated date aligned with persisted daily history after a page reload. */
+function readClock(farmId: FarmId): { date: Date; elapsedHours: number } | null {
+  try {
+    const stored = localStorage.getItem(clockKey(farmId));
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as { date: string; elapsedHours: number };
+    const date = new Date(parsed.date);
+    if (!Number.isNaN(date.getTime()) && Number.isFinite(parsed.elapsedHours) && parsed.elapsedHours >= 0) {
+      return { date, elapsedHours: parsed.elapsedHours };
+    }
+  } catch (error) {
+    console.warn('Failed to read simulated clock:', error);
+  }
+  return null;
+}
+
+function writeClock(farmId: FarmId, date: Date, elapsedHours: number): void {
+  try {
+    localStorage.setItem(clockKey(farmId), JSON.stringify({ date: date.toISOString(), elapsedHours }));
+  } catch (error) {
+    console.warn('Failed to persist simulated clock:', error);
+  }
+}
+
+function clearClock(farmId: FarmId): void {
+  try {
+    localStorage.removeItem(clockKey(farmId));
+  } catch (error) {
+    console.warn('Failed to clear simulated clock:', error);
+  }
+}
+
 /**
  * Props for the DemoProvider component.
  */
@@ -111,6 +148,7 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
     setFlows,
     resetToBaseline,
     applySnapshot,
+    recordTimeAdvance,
   } = useTelemetry();
   const { setCustomWeather } = useWeather();
 
@@ -170,6 +208,13 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
   // Reset demo state whenever the active farm profile changes
   useEffect(() => {
     resetInternalDemoState();
+    if (activeFarm) {
+      const clock = readClock(activeFarm.id);
+      if (clock) {
+        setSimulatedDate(clock.date);
+        setElapsedSimulatedHours(clock.elapsedHours);
+      }
+    }
   }, [activeFarm?.id, resetInternalDemoState]);
 
   /**
@@ -336,13 +381,21 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
 
       setSimulatedDate(result.date);
       setElapsedSimulatedHours((prev) => prev + hours);
+      writeClock(activeFarm.id, result.date, elapsedSimulatedHours + hours);
       setTankVolumes(result.volumes);
       setFlows(result.flows);
+      recordTimeAdvance({
+        startDate: simulatedDate,
+        endDate: result.date,
+        startVolumes: telemetry.tankVolumes,
+        endVolumes: result.volumes,
+        flows: result.flows,
+      });
       if (result.weather) {
         setCustomWeather(result.weather);
       }
     },
-    [activeFarm, telemetry, simulatedDate, scenario, scheduledIrrigationDemand, setTankVolumes, setFlows, setCustomWeather]
+    [activeFarm, telemetry, simulatedDate, elapsedSimulatedHours, scenario, scheduledIrrigationDemand, setTankVolumes, setFlows, recordTimeAdvance, setCustomWeather]
   );
 
   /**
@@ -355,12 +408,19 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    * @throws Never throws.
    */
   const resetTime = useCallback((): void => {
-    setSimulatedDate(new Date());
+    const now = new Date();
+    setSimulatedDate(now);
     setElapsedSimulatedHours(0);
+    if (activeFarm) clearClock(activeFarm.id);
+    if (telemetry) recordTimeAdvance({
+      startDate: now, endDate: now,
+      startVolumes: telemetry.tankVolumes, endVolumes: telemetry.tankVolumes,
+      flows: telemetry.flows,
+    });
     if (scenario === 'live') {
       setCustomWeather(null);
     }
-  }, [scenario, setCustomWeather]);
+  }, [activeFarm, telemetry, recordTimeAdvance, scenario, setCustomWeather]);
 
   /**
    * Triggers the 2-second animated optimization process and applies pre-computed optimal parameters (ADR 0002).
@@ -426,9 +486,19 @@ export function DemoProvider({ children }: DemoProviderProps): React.JSX.Element
    * @throws Never throws.
    */
   const resetDemo = useCallback((): void => {
+    if (activeFarm) clearClock(activeFarm.id);
     resetInternalDemoState();
     resetToBaseline();
-  }, [resetInternalDemoState, resetToBaseline]);
+    if (activeFarm) {
+      const baseline = getFarmBaseline(activeFarm.id);
+      const now = new Date();
+      recordTimeAdvance({
+        startDate: now, endDate: now,
+        startVolumes: baseline.volumes, endVolumes: baseline.volumes,
+        flows: baseline.flows,
+      });
+    }
+  }, [activeFarm, recordTimeAdvance, resetInternalDemoState, resetToBaseline]);
 
   // A High Salinity scenario and an unoptimized farm are the two states that run on the stressed
   // external supply; every other state draws the ordinary balanced one.
@@ -500,4 +570,3 @@ export function useDemo(): DemoContextType {
   }
   return context;
 }
-

@@ -41,6 +41,8 @@ describe('AppShell Seam', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: BASELINE_TELEMETRY['small-farm'].flows.irrigationDemand,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
     // The shell mounts the offline indicator, the notification opt-in and the alert dock, all of
     // which read PWA state; an online device with notifications already decided shows none of them.

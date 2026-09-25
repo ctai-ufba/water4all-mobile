@@ -20,6 +20,8 @@ import { WaterTruckModal } from '../supervisory/WaterTruckModal';
 import { PumpTransferModal } from '../supervisory/PumpTransferModal';
 import { CloudRain, Wind, Truck, Cylinder, Layers, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { TransferSourceTank } from '../../types/telemetry';
+import { TrendChart } from '../charts/TrendChart';
+import { formatHistorySeries } from '../../domain/historicalTelemetry';
 
 /**
  * Dedicated Tanks & Sources screen component.
@@ -34,7 +36,7 @@ import { TransferSourceTank } from '../../types/telemetry';
  */
 export function TanksView(): React.JSX.Element {
   const { activeFarm } = useAuth();
-  const { telemetry } = useTelemetry();
+  const { telemetry, history } = useTelemetry();
 
   // Supervisory control modal states
   const [isTruckModalOpen, setIsTruckModalOpen] = useState(false);
@@ -173,6 +175,26 @@ export function TanksView(): React.JSX.Element {
         </div>
       </div>
 
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl" aria-label="Seven-day tank dynamics">
+        <h3 className="text-sm font-bold text-white">Seven-Day Tank Dynamics</h3>
+        <p className="mt-1 text-xs text-slate-400">Daily storage snapshots by reservoir</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {([
+            ['rainwater', 'Rainwater storage', '#22d3ee'],
+            ['esa', 'ESA storage', '#a78bfa'],
+            ['external', 'External supply storage', '#fbbf24'],
+            ['blend', 'Blend storage', '#34d399'],
+          ] as const).map(([tank, title, color]) => (
+            <div key={tank} className="rounded-xl bg-slate-950/60 p-3 ring-1 ring-slate-800/80">
+              <p className="mb-2 text-xs font-semibold text-slate-200">{title}</p>
+              <TrendChart title={`${title} trend`} unit="m³" series={[
+                { name: title, color, points: formatHistorySeries(history, (day) => day.tankVolumes[tank]) },
+              ]} />
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Critical Storage Alerts Summary Banner */}
       {hasCriticalAlert && (
         <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-3.5 text-rose-300 shadow-lg">
@@ -279,4 +301,3 @@ export function TanksView(): React.JSX.Element {
     </div>
   );
 }
-

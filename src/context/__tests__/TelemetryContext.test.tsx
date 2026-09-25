@@ -48,6 +48,8 @@ function TestTelemetryConsumer(): React.JSX.Element {
     requestWaterTruck,
     executePumpTransfer,
     resetToBaseline,
+    history,
+    recordTimeAdvance,
   } = useTelemetry();
 
   if (!telemetry) {
@@ -68,6 +70,15 @@ function TestTelemetryConsumer(): React.JSX.Element {
       <div data-testid="irrigation-mode">{telemetry.irrigationMode}</div>
       <div data-testid="irrigation-demand">{telemetry.flows.irrigationDemand}</div>
       <div data-testid="truck-cost">{telemetry.cumulativeTruckDeliveryCostEur}</div>
+      <div data-testid="history-dates">{history.map((day) => day.date).join(',')}</div>
+      <div data-testid="history-last-blend">{history.at(-1)?.tankVolumes.blend}</div>
+      <button onClick={() => recordTimeAdvance({
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        startVolumes: telemetry.tankVolumes,
+        endVolumes: { ...telemetry.tankVolumes, blend: 23 },
+        flows: telemetry.flows,
+      })}>Record Next Day</button>
 
       <button
         onClick={() =>
@@ -102,6 +113,46 @@ function TestTelemetryConsumer(): React.JSX.Element {
 }
 
 describe('TelemetryContext Seam', () => {
+  it('seeds, persists and rehydrates farm history after a demo day advances', () => {
+    localStorage.clear();
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      activeFarm: FARM_PROFILES['small-farm'], isAuthenticated: true,
+      login: vi.fn(), logout: vi.fn(), switchFarm: vi.fn(),
+    });
+    const first = render(<TelemetryProvider><TestTelemetryConsumer /></TelemetryProvider>);
+    expect(screen.getByTestId('history-dates').textContent?.split(',')).toHaveLength(7);
+    act(() => screen.getByRole('button', { name: 'Record Next Day' }).click());
+    expect(screen.getByTestId('history-last-blend')).toHaveTextContent('23');
+    expect(screen.getByTestId('history-dates')).toHaveTextContent(
+      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    );
+    first.unmount();
+    render(<TelemetryProvider><TestTelemetryConsumer /></TelemetryProvider>);
+    expect(screen.getByTestId('history-last-blend')).toHaveTextContent('23');
+    localStorage.clear();
+  });
+
+  it('keeps seven-day histories separate when the active farm changes', () => {
+    localStorage.clear();
+    const auth = vi.spyOn(AuthContextModule, 'useAuth');
+    const withFarm = (farm: typeof FARM_PROFILES['small-farm']) => ({
+      activeFarm: farm, isAuthenticated: true,
+      login: vi.fn(), logout: vi.fn(), switchFarm: vi.fn(),
+    });
+    auth.mockReturnValue(withFarm(FARM_PROFILES['small-farm']));
+    const view = render(<TelemetryProvider><TestTelemetryConsumer /></TelemetryProvider>);
+    act(() => screen.getByRole('button', { name: 'Record Next Day' }).click());
+    expect(screen.getByTestId('history-last-blend')).toHaveTextContent('23');
+
+    auth.mockReturnValue(withFarm(FARM_PROFILES['medium-farm']));
+    view.rerender(<TelemetryProvider><TestTelemetryConsumer /></TelemetryProvider>);
+    expect(screen.getByTestId('history-last-blend')).toHaveTextContent('62');
+
+    auth.mockReturnValue(withFarm(FARM_PROFILES['small-farm']));
+    view.rerender(<TelemetryProvider><TestTelemetryConsumer /></TelemetryProvider>);
+    expect(screen.getByTestId('history-last-blend')).toHaveTextContent('23');
+    localStorage.clear();
+  });
   it('throws error when useTelemetry is used outside TelemetryProvider', () => {
     // Suppress console.error in test output for expected throw
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

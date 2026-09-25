@@ -15,6 +15,8 @@ import { BlendTankAlert } from './BlendTankAlert';
 import { DailyWaterBalanceCard } from './DailyWaterBalanceCard';
 import { WaterEfficiencyCard } from './WaterEfficiencyCard';
 import { WeatherCard } from './WeatherCard';
+import { TrendChart } from '../charts/TrendChart';
+import { formatHistorySeries } from '../../domain/historicalTelemetry';
 
 /**
  * Props for the DashboardView component.
@@ -43,7 +45,7 @@ export interface DashboardViewProps {
  */
 export function DashboardView({ onNavigate }: DashboardViewProps = {}): React.JSX.Element {
   const { activeFarm } = useAuth();
-  const { telemetry } = useTelemetry();
+  const { telemetry, history } = useTelemetry();
 
   if (!activeFarm || !telemetry) {
     return (
@@ -124,6 +126,24 @@ export function DashboardView({ onNavigate }: DashboardViewProps = {}): React.JS
         isSurplus={telemetry.isSurplus}
         flows={telemetry.flows}
       />
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl" aria-label="Seven-day water trends">
+        <h3 className="text-sm font-bold text-white">Seven-Day Water Trends</h3>
+        <p className="mt-1 text-xs text-slate-400">Daily totals; advanced days include only the hours simulated</p>
+        <div className="mt-4 space-y-5">
+          <TrendChart title="Daily water balance trend" unit="m³" zeroBaseline series={[
+            { name: 'Inflow', color: '#34d399', points: formatHistorySeries(history, (day) => day.inflow) },
+            { name: 'Consumption', color: '#fb7185', points: formatHistorySeries(history, (day) => day.consumption) },
+            { name: 'Net balance', color: '#67e8f9', points: formatHistorySeries(history, (day) => day.netBalance) },
+          ]} />
+          <div className="border-t border-slate-800 pt-4">
+            <p className="mb-2 text-xs font-semibold text-slate-200">ESA water yield</p>
+            <TrendChart title="ESA water yield trend" unit="m³" series={[
+              { name: 'ESA water', color: '#a78bfa', points: formatHistorySeries(history, (day) => day.esaYield) },
+            ]} />
+          </div>
+        </div>
+      </section>
 
       {/* Water Efficiency & Savings Card */}
       <WaterEfficiencyCard

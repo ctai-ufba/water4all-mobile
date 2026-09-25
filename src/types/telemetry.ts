@@ -51,6 +51,24 @@ export interface TankVolumeMetrics {
   blend: number;
 }
 
+/** One daily observation used by the seven-day telemetry trends. */
+export interface HistoricalTelemetryDay {
+  /** Calendar day in UTC, YYYY-MM-DD. */
+  date: string;
+  /** Water entering the farm during this day or simulated part-day, in m³. */
+  inflow: number;
+  /** Water used during this day or simulated part-day, in m³. */
+  consumption: number;
+  /** Inflow minus consumption, in m³. */
+  netBalance: number;
+  /** Physical storage at the observation time, in m³. */
+  tankVolumes: TankVolumeMetrics;
+  /** ESA water produced during this day or simulated part-day, in m³. */
+  esaYield: number;
+  /** Seeded complete-day value or accumulated simulated interval. */
+  source: 'seed' | 'simulated';
+}
+
 /**
  * Water flow rates and agricultural demands in cubic meters per day (m³/day).
  */

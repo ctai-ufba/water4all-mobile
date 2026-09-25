@@ -67,6 +67,8 @@ describe('Supervisory Controls Components', () => {
       resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
     });
   });
 
@@ -95,6 +97,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<IrrigationModeSelector />);
@@ -149,6 +153,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
@@ -193,6 +199,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<WaterTruckModal isOpen={true} onClose={vi.fn()} />);
@@ -221,6 +229,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -251,6 +261,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -274,6 +286,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
         applySnapshot: vi.fn(),
         scheduledIrrigationDemand: 2.1,
+        history: [],
+        recordTimeAdvance: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -329,6 +343,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
@@ -363,6 +379,8 @@ describe('Supervisory Controls Components', () => {
         resetToBaseline: vi.fn(),
       applySnapshot: vi.fn(),
       scheduledIrrigationDemand: 2.1,
+      history: [],
+      recordTimeAdvance: vi.fn(),
       });
 
       render(<PumpTransferModal isOpen={true} onClose={vi.fn()} />);
